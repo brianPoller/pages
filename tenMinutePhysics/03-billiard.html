@@ -151,10 +151,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		restitution : 1.0
 	};
 
+
 	function setupScene() 
 	{
 		physicsScene.balls = [];
-		var numBalls = 20;
+		var numBalls = 2;
 
 		for (i = 0; i < numBalls; i++) {
 
@@ -266,6 +267,79 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	document.getElementById("restitutionSlider").oninput = function() {
 		physicsScene.restitution = this.value / 10.0;
 	}
+
+
+
+
+	// ------------------------ user interaction ---------------------------
+
+	canvas.addEventListener("touchstart", onTouchStart, false);
+	canvas.addEventListener("touchend", onTouchEnd, false);
+
+	canvas.addEventListener("mousedown", onMouseDown, false);
+	canvas.addEventListener("mouseup", onMouseUp, false);
+	
+	function onTouchStart(event)
+	{
+		for (var i = 0; i < event.touches.length; i++) {
+			var touch = event.touches[i];
+
+			var rect = canvas.getBoundingClientRect();	
+			var touchPos = new Vector2(
+				(touch.clientX - rect.left) / cScale, 
+				simHeight - (touch.clientY - rect.top) / cScale);
+
+			// for (var j = 0; j < physicsScene.flippers.length; j++) {
+				// var flipper = physicsScene.flippers[j];
+				// if (flipper.select(touchPos)) 
+					// flipper.touchIdentifier = touch.identifier;
+			// }
+		}
+	}
+
+	function onTouchEnd(event)
+	{
+		for (var i = 0; i < physicsScene.flippers.length; i++) {
+			var flipper = physicsScene.flippers[i];
+			if (flipper.touchIdentifier < 0)
+				continue;
+			var found = false;
+			for (var j = 0; j < event.touches.length; j++) {
+				if (event.touches[j].touchIdentifier == flipper.touchIdentifier)
+					found = true;
+			}
+			if (!found)
+				flipper.touchIdentifier = -1;
+		}
+	}
+
+	function onMouseDown(event)
+	{
+		var rect = canvas.getBoundingClientRect();	
+		var mousePos = new Vector2(
+			(event.clientX - rect.left) / cScale, 
+			simHeight - (event.clientY - rect.top) / cScale);
+
+		// for (var j = 0; j < physicsScene.flippers.length; j++) {
+		// 	var flipper = physicsScene.flippers[j];
+		// 	if (flipper.select(mousePos)) 
+		// 		flipper.touchIdentifier = 0;
+		// }
+
+		var radius = 0.25;
+			var mass = Math.PI * radius * radius;
+			var pos = mousePos;
+			var vel = new Vector2(0, 2);
+
+			physicsScene.balls.push(new Ball(radius, mass, pos, vel));
+	}
+
+	function onMouseUp(event)
+	{
+		for (var i = 0; i < physicsScene.flippers.length; i++) 
+			physicsScene.flippers[i].touchIdentifier = -1;
+	}	
+
 	
 </script> 
 </body>

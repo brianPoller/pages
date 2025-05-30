@@ -19,7 +19,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		}
 		</style>
 	</head>
-	
+	        <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
+        <script src="https://unpkg.com/three@0.139.2/examples/js/controls/OrbitControls.js"></script>
 	<body>
 
         <h1>Cannonball 3d</h1> 
@@ -27,10 +28,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		<button onclick="restart()" class="button">Restart</button>
 
 		<br><br>		
-        <div id="container"></div>
-        
-        <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
-        <script src="https://unpkg.com/three@0.139.2/examples/js/controls/OrbitControls.js"></script>
+        <!-- <div id="container"></div> -->
+		<canvas id="canvasID" width="640" height="480" style="position: absolute; left: 0px; top: 120px;"></canvas>
+ 
+
 		<script>
 			
 			var threeScene;
@@ -170,12 +171,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				
 				// Renderer
 
-				renderer = new THREE.WebGLRenderer();
+				// renderer = new THREE.WebGLRenderer();
+				var canvas = document.getElementById("canvasID");
+				renderer = new THREE.WebGLRenderer({ canvas: canvas });
 				renderer.shadowMap.enabled = true;
 				renderer.setPixelRatio( window.devicePixelRatio );
-				renderer.setSize( 0.8 * window.innerWidth, 0.8 * window.innerHeight );
+				// renderer.setSize( 0.8 * window.innerWidth, 0.8 * window.innerHeight );
 				window.addEventListener( 'resize', onWindowResize, false );
-				container.appendChild( renderer.domElement );
+				// container.appendChild( renderer.domElement );
 				
 				// Camera
 						

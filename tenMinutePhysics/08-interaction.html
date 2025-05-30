@@ -49,26 +49,674 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			var gCameraControl;
 			var gGrabber;
 			var gMouseDown = false;
+			var gGenerator;
 
 			var gPhysicsScene = 
 			{
-				gravity : new THREE.Vector3(0.0, -10.0, 0.0),
+				gravity : new THREE.Vector3(0.0, -1.0, 0.0),
 				dt : 1.0 / 60.0,
-				worldSize : { x: 1.5, z : 2.5 },
+				worldSize : { x: 1.5, z : 3 },
 				paused: true,
-				objects: [],				
+				shots: [],
+				objects: [],
+				numSubSteps: 10,
+				// balls:[],	
+				colliders: [],
+				newColliders: [],	
+				shotClock:0.2,		
+				shotRadius:0.1,
+				shotMass:0.3,
+				shotPower:100,
+				shotSpeed:2.5,
+				colliderGeneratorClock:3.5,
+				colliderGeneratorRadius:0.1,
+				colliderGeneratorMass:0.01,
+				colliderGeneratorLife:50,
+				colliderSpeed:-0.1,
+				zPlane:2,
+
 			};
 
-			// ------------------------------------------------------------------
-			class Ball {
-				constructor(pos, radius, vel)
+//----------------------------------**
+
+function onlyUnique(value, index, array) {
+    return array.indexOf(value) === index;
+  }
+
+function diff(arr) {
+  const result = [];
+  for (let i = 1; i < arr.length; i++) {
+    result.push(arr[i] - arr[i - 1]);
+  }
+  return result;
+}
+
+function createRepeatingSequence(sequence, length){
+const result=[];
+index=0;
+while (result.length < length){
+	result.push(sequence[index]);
+	index= (index +1) % sequence.length;
+}
+return result;
+}
+
+function createRepeatingArray(start,end, repeatCount){
+	for (let i=start; i<end; i++){
+	for (let j=0; j< repeatCount; j++){
+		result.push(i)
+	}
+}
+return result
+}
+
+
+class ConElement{
+	constructor (life, mass, disposal, xPosRel, yPosRel, xPosGlo, yPosGlo, iIndex, jIndex) {
+	this.life=life;
+	this.mass=mass;
+	this.disposal=disposal;
+	this.xPosRel=xPosRel;
+	this.yPosRel=yPosRel;
+	this.xPosGlo=xPosGlo;
+	this.yPosGlo=yPosGlo;
+	this.iIndex=iIndex;
+	this.jIndex=jIndex;
+		}
+	}
+
+
+class ConObjectCand {
+	constructor( centerPos, centerVel, centerRot, centerRotVel, massIn, lifeIn, disposalIn, H, W, radius, xPosRelIn, yPosRelIn){
+	this.massIn=massIn;
+	this.lifeIn=lifeIn;
+	this.disposalIn=disposalIn;
+	this.radius=radius;
+	this.centerPos=centerPos;
+	this.centerVel = centerVel;
+	this.centerRot=centerRot;
+	this.centerRotVel=centerRotVel;
+	this.H=H;
+	this.W=W;
+	this.xPosRel=xPosRelIn;
+	this.yPosRel=yPosRelIn;
+
+	}
+}
+
+class ConObject0 {
+	constructor( centerPos, centerVel, centerRot, centerRotVel, massIn, lifeIn, disposalIn, H, W, radius, justCreated, xPosRelIn, yPosRelIn){
+	this.elements=[];
+	this.totalMass=0;
+	this.centerPos=centerPos;
+	this.centerVel = centerVel;
+	this.centerRot=centerRot;
+	this.centerRotVel=centerRotVel;
+	this.H=H;
+	this.W=W;
+	this.justCreated=justCreated;
+	this.adjudicateCheck=false;
+	this.xPosRelIn=xPosRelIn;
+	this.yPosRelIn=yPosRelIn;
+	this.disposalIn=disposalIn;
+	this.radius = radius;
+	
+
+		for (var j = 0; j < H; j++) {
+			for (var i = 0; i < W; i++) {
+
+
+				let kindex=j*W+i;
+				let xPosRel=0
+				let yPosRel=0
+				if (justCreated==false){
+				xPosRel=i*2*radius;
+				yPosRel=j*2*radius;
+				}
+				if (justCreated==true){
+				xPosRel=xPosRelIn[kindex];
+				yPosRel=yPosRelIn[kindex];
+				}
+				let xPosGlo=xPosRel+centerPos.x;
+				let yPosGlo=yPosRel+centerPos.y;
+				if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+
+				this.elements.push(new ConElement(lifeIn[kindex],massIn[kindex],disposalIn[kindex],xPosRel,yPosRel,xPosGlo,yPosGlo,i, j))
+				if (disposalIn[kindex] == false){
+					let newMass=this.totalMass+massIn[kindex];
+					this.totalMass=newMass;
+				}
+			}
+		}
+		if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+
+	if (this.totalMass==0){
+			let hobo=true;
+
+	}
+
+	this.disposal=false;
+	this.isShot=false;
+	this.grabbed = false;
+
+	this.grid = new THREE.Object3D();
+					// visual mesh
+
+					// for legth index	i
+					// let currOx=centerX+posMapXs[i]
+
+					// let sTheta=mat.sin(this.centerRot)
+					// let cTheta=mat.cos(this.centerRot)
+	for (var j = 0; j < this.elements.length; j++) {
+		var geometry = new THREE.SphereGeometry( this.radius, 32, 32 );
+		var material = new THREE.MeshBasicMaterial( {color: 0xff0000} );
+		var sphere = new THREE.Mesh( geometry, material );
+		let localX=this.centerPos.x+this.elements[j].xPosRel ;
+		let localY=this.centerPos.y+this.elements[j].yPosRel;
+		sphere.position.set( localX, localY, 0 );
+		sphere.geometry.computeBoundingSphere();
+		// this.currPosXs[j]=this.posMapXs[j] * 2 * this.radius + this.centerPos.x;
+		// this.currPosYs[j]=this.posMapYs[j]  * 2 * this.radius + this.centerPos.y; 
+		this.grid.add(sphere);
+	}
+		this.MassUpdate();
+		if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+	this.grid.position.set(this.centerPos)
+	// this.grid.rotation.set()
+	gThreeScene.add(this.grid);		
+
+	if (this.justCreated==true){
+			let hobo=true;
+	}
+
+	this.COMUpdate();
+
+	}
+
+
+	MassUpdate(){
+		this.totalMass=0;
+		for (var j = 0; j < this.elements.length; j++) {
+			if (this.elements[j].disposal==false){
+				let newMass=this.totalMass+this.elements[j].mass;
+				this.totalMass=newMass;
+				}
+			}
+		// this.totalMass=totalMassCount;
+		}
+			COMUpdate(){
+				if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+
+				let totalXs=0; let totalYs=0;
+				for (var j = 0; j < this.elements.length; j++) {
+					if (this.elements[j].disposal==false){
+						let xpart=this.elements[j].mass*this.elements[j].xPosRel;
+						let ypart=this.elements[j].mass*this.elements[j].yPosRel;
+
+					totalXs=totalXs+xpart;
+					totalYs=totalYs+ypart;
+					}
+				}
+				let comx=totalXs/this.totalMass;
+				let comy=totalYs/this.totalMass;
+
+				for (var j = 0; j < this.elements.length; j++) {
+					if (this.elements[j].disposal==false){
+						let xtemp=this.elements[j].xPosRel
+						let ytemp=this.elements[j].yPosRel
+						this.elements[j].xPosRel=xtemp-comx;
+						this.elements[j].yPosRel=ytemp-comy;
+						// this.elements[j].xPosGlo=xtemp-comx+this.centerPos.x;
+						// this.elements[j].yPosGlo=ytemp-comy+this.centerPos.y;
+
+						}
+				}
+					
+				this.comx=comx;
+				this.comy=comy;
+				let px=this.centerPos.x;
+				let py=this.centerPos.y;
+				this.centerPos.x=px+comx;
+				this.centerPos.y=py+comy;
+
+				if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+				for (var j = 0; j < this.elements.length; j++) {
+					if (this.elements[j].disposal==false){
+						this.elements[j].xPosGlo=this.elements[j].xPosRel+this.centerPos.x;
+						this.elements[j].yPosGlo=this.elements[j].yPosRel+this.centerPos.y;
+
+					}
+				}
+
+		for (var j = 0; j < this.elements.length; j++) {
+
+		this.grid.children[j].position.x=this.elements[j].xPosRel;
+		this.grid.children[j].position.y=this.elements[j].yPosRel;
+
+	}
+	this.grid.position.set(this.centerPos)
+					// this.com.y=totalYs/this.totalMass; nope
+					// com is initially olved rel to UL at 00
+					// for collider shift all rel points by val-com x
+
+			
+		}
+			eightFoldAppend(kIndex){
+				let appendList=[];
+	// kindex=j*W+i;
+				let jval=Math.floor(kIndex/this.W)
+				let ival=kIndex % this.W
+				
+				let eightFold= new Array(8).fill(true);
+				// 8 fold index 
+//   0		1			2		3			4		5			6			7					
+// {i,j+1} {i+1, j} {i+1, j+1} {i,j-1} {i-1, j} {i-1, j-1} {i-1,j+1} {i+1, j-1}
+				// 
+				// 
+				let ivalp=ival+1;
+				if ( ivalp>this.W ){
+					eightFold[1]=false;
+					eightFold[2]=false;
+					eightFold[7]=false;
+				}
+				let ivaln=ival-1;
+				if ( ivaln<0 ){
+					eightFold[4]=false;
+					eightFold[5]=false;
+					eightFold[6]=false;
+				}
+				let jvalp=jval+1;
+				if ( jvalp>this.H ){
+					eightFold[0]=false;
+					eightFold[2]=false;
+					eightFold[6]=false;
+				}
+				let jvaln=jval-1;
+				if ( jvaln<0 ){
+					eightFold[3]=false;
+					eightFold[5]=false;
+					eightFold[7]=false;
+				}
+
+//   0		1			2		3			4		5			6			7					
+// {i,j+1} {i+1, j} {i+1, j+1} {i,j-1} {i-1, j} {i-1, j-1} {i-1,j+1} {i+1, j-1}
+				// 
+				// 
+				if (eightFold[0]==true){
+					// ival jvalp
+					let kval= jvalp*this.W+ival
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+				if (eightFold[1]==true){
+					// ivalp jval
+					let kval= jval*this.W+ivalp
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+
+
+//   0		1			2		3			4		5			6			7					
+// {i,j+1} {i+1, j} {i+1, j+1} {i,j-1} {i-1, j} {i-1, j-1} {i-1,j+1} {i+1, j-1}
+				// 
+				// 
+				if (eightFold[2]==true){
+					let kval= jvalp*this.W+ivalp
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+				if (eightFold[3]==true){
+					let kval= jvaln*this.W+ival
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+
+//   0		1			2		3			4		5			6			7					
+// {i,j+1} {i+1, j} {i+1, j+1} {i,j-1} {i-1, j} {i-1, j-1} {i-1,j+1} {i+1, j-1}
+				// 
+				// 
+				if (eightFold[4]==true){
+					let kval= jval*this.W+ivaln
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+				if (eightFold[5]==true){
+					let kval= jvaln*this.W+ivaln
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+
+//   0		1			2		3			4		5			6			7					
+// {i,j+1} {i+1, j} {i+1, j+1} {i,j-1} {i-1, j} {i-1, j-1} {i-1,j+1} {i+1, j-1}
+				// 
+				// 
+				if (eightFold[6]==true){
+					let kval= jvalp*this.W+ivaln
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+				if (eightFold[7]==true){
+					let kval= jvaln*this.W+ivalp
+					if (this.completionMap[kval]==false){
+						appendList.push(kval)
+						this.completionMap[kval]=true
+					}
+				}
+				// k kindex=j*W+i;
+				// if checkIndex_i>0 && checkIndex_i<W
+				//  if checkIndex_j>0 && checkIndex_j<H
+				
+				// if completion==false
+				//  append index; set complete true
+				// add to tryNext index
+				// check total completion with break
+				// otherwise continue
+				// need to resort, get H,W 
+				// find valued indices to resort
+				return appendList;
+			}
+			setCompletionMap(){
+				this.completionMap = new Array(this.H*this.W).fill(false);
+				for (var j = 0; j < this.elements.length; j++) {
+					if (this.elements[j].disposal==true){
+						this.completionMap[j]=true; 
+					}
+			}
+			}
+
+			checkDisposalStatus(){
+				let status=true;
+				let nextIndex=0;
+				for (var j = 0; j < this.elements.length; j++) {
+					if (this.completionMap[j]==false){
+						status=false;
+						nextIndex=j;
+						break; 
+					}
+			}
+			return { status:status, nextIndex:nextIndex}
+			}
+
+			checkBreakages(){	
+
+				if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+				// this.checkBreakagesStar.reset
+				this.setCompletionMap();
+				let completionStatus=false;
+				// let candidatesIndex=0;
+				//this.checkBreakagesStar.candidates
+				let candidates=[];
+
+				while (completionStatus==false){
+					let output=this.checkDisposalStatus();
+					if (output.status==true){
+						completionStatus=true;
+						break;
+					}
+					
+					let candidateNextIndex=output.nextIndex;
+					this.completionMap[candidateNextIndex]=true;
+					let candidate=[]
+					candidate.push(candidateNextIndex)
+					let candidateCount=0;
+					let curr_completionStatus=false
+					while (curr_completionStatus==false){
+						let additionalCandidates=this.eightFoldAppend(candidate[candidateCount])
+						if (additionalCandidates.length>0){
+							for (var j = 0; j < additionalCandidates.length; j++) {
+							candidate.push(additionalCandidates[j])
+							}
+						}
+						candidateCount++
+						// could short here if candidate length is greater than total completion needed
+
+						if (candidateCount>candidate.length){
+							candidates.push(candidate)
+							completionStatus=this.checkDisposalStatus().status;
+							curr_completionStatus=true;
+						}
+					}
+				}
+					// if candidates.length > 1
+					//	 else write oldIs oldJs
+					//	 get newH, newW if new
+					// else 
+					// for each candidate
+					// 	get newH, newW
+					// let poo=true;
+
+					if (candidates.length>1){
+					let momu=1;
+				}
+
+				for (var j = 0; j < candidates.length; j++) {
+
+					let iList= [candidates[j].length];
+					let jList= [candidates[j].length];
+					for (var i = 0; i < candidates[j].length; i++) {
+						iList[i]=this.elements[candidates[j][i]].iIndex;
+						jList[i]=this.elements[candidates[j][i]].jIndex		
+					}		
+					let iMin= Math.min(...iList);
+					let iMax= Math.max(...iList);
+					let jMin= Math.min(...jList);
+					let jMax= Math.max(...jList);
+					let newW=1+iMax-iMin;
+					let newH=1+jMax-jMin;
+
+
+					if ( (newW==this.W) && (newH==this.H) && (candidates.length==1)){
+						return
+					}
+
+
+					if (iMin>0){
+						for (var i = 0; i < candidates[j].length; i++) {
+						iList[i]=iList[i]-iMin;
+					}
+					}
+					if (jMin>0){
+						for (var i = 0; i < candidates[j].length; i++) {
+						jList[i]=jList[i]-jMin;
+					}
+					}
+					let kList=  new Array(candidates[j].length).fill(0); 
+
+					for (var i = 0; i < candidates[j].length; i++) {
+						let kval= jList[i]*newW+iList[i]
+						kList[i]=kval
+					}
+
+					let sortIndex=sortWithIndex(kList);
+					// if ( (newW==this.W) && (newH==this.H) ){
+						// sortIndex=kList;
+					// }
+
+					let numElem=newH*newW;
+					let massIn= new Array(numElem).fill(0); 
+					let lifeIn= new Array(numElem).fill(0); 
+					let disposalIn= new Array(numElem).fill(true); 
+					let xPosRelIn= new Array(numElem).fill(0); 
+					let yPosRelIn= new Array(numElem).fill(0); 
+
+					for (var kk=0; kk< kList.length; kk++){
+						disposalIn[kList[sortIndex[kk]]]=false;
+					} 
+
+					for (var i = 0; i < kList.length; i++) {
+						// let kval= jList[i]*newW+iList[i]
+						massIn[kList[sortIndex[i]]]=this.elements[candidates[j][sortIndex[i]]].mass;
+						lifeIn[kList[sortIndex[i]]]=this.elements[candidates[j][sortIndex[i]]].life;
+						// disposalIn[i]=this.elements[candidates[j][sortIndex[i]]].disposal;
+						xPosRelIn[kList[sortIndex[i]]]=this.elements[candidates[j][sortIndex[i]]].xPosRel;
+						yPosRelIn[kList[sortIndex[i]]]=this.elements[candidates[j][sortIndex[i]]].yPosRel;
+					}
+
+					if (massIn.length==1){
+					let mamu=1;
+				}
+
+				if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+					// create newList then add end
+					// gPhysicsScene.colliders
+					gPhysicsScene.newColliders.push(new ConObjectCand(this.centerPos.clone(), this.centerVel.clone(), this.centerRot, this.centerRotVel, massIn, lifeIn, disposalIn, newH, newW,  this.radius, xPosRelIn, yPosRelIn)); 
+
+
+				}
+
+				for (var j = 0; j < this.elements.length; j++) {
+	 					this.elements[j].disposal=true
+					}
+					this.disposal=true;
+				// for candidates, need to sort 
+			}
+
+						checkDisposall(){
+					let disposeCheck=0
+					for (var j = 0; j < this.elements.length; j++) {
+	 					if (this.elements[j].disposal==true){
+							disposeCheck=disposeCheck+1
+						}
+					}
+					if (disposeCheck==this.elements.length){
+						this.disposal=true;
+
+					}
+
+				}
+			
+				propagate(sdt)
+				{
+					if (this.grabbed)
+						return;
+
+						if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+
+					this.centerVel.addScaledVector(gPhysicsScene.gravity, sdt);
+					this.centerPos.addScaledVector(this.centerVel, sdt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.centerPos.x < -size.x) {
+						this.centerPos.x = -size.x; this.centerVel.x = -this.centerVel.x;
+					}
+					if (this.centerPos.x >  size.x) {
+						this.centerPos.x =  size.x; this.centerVel.x = -this.centerVel.x;
+					}
+					// if (this.centerPos.z < -size.z) {
+					// 	this.centerPos.z = -size.z; this.vel.z = -this.vel.z;
+					// }
+					// if (this.centerPos.z >  size.z) {
+					// 	this.centerPos.z =  size.z; this.vel.z = -this.vel.z;
+					// }
+					if (this.centerPos.y<0) {
+						// this.dispose=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.grid.position.copy(this.centerPos);
+
+					for (var j = 0; j < this.elements.length; j++) {
+						let xpart=this.elements[j].xPosRel+this.centerPos.x;
+						let ypart=this.elements[j].yPosRel+this.centerPos.y;
+					this.elements[j].xPosGlo=xpart
+					this.elements[j].yPosGlo=ypart;
+					if (this.elements[j].yPosGlo<0) {
+						this.elements[j].disposal=true;
+						this.adjudicateCheck=true;
+						
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+					}
+
+					if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+       		 }
+
+			 update(){
+				// if (this.justCreated==false){
+					if (isNaN(this.centerPos.x)){
+					let maga=1;
+				}
+
+				if (this.adjudicateCheck==true){
+
+					this.checkBreakages();
+					this.checkDisposall(); // total disposal
+					// check breakages
+					// if destroy... break
+					// if (this.disposal==false){
+					// }
+					if (this.disposal==false){
+					this.MassUpdate();
+					this.COMUpdate();
+					// this.updateMOI();
+
+					}
+
+					this.adjudicateCheck=false;
+					}
+					// }
+
+
+			 }
+		// create newList then add end
+					// gPhysicsScene.colliders
+
+
+			 }
+
+					// this.grid.geometry.computeBoundingSphere();
+			
+
+			//---------------------
+
+			class Macro {
+				constructor(pos, radius, vel, mass, life)
 				{
 					// physics data 
+					this.isShot=false;
 
                     this.pos = pos;
                     this.radius = radius;
                     this.vel = vel;
 					this.grabbed = false;
+					this.disposal= false;
+					this.mass=mass;
+					this.life=life;
+					this.dFactor=0.01;
+
 
 					// visual mesh
 
@@ -103,54 +751,153 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 					if (this.pos.z >  size.z) {
 						this.pos.z =  size.z; this.vel.z = -this.vel.z;
 					}
-					if (this.pos.y < this.radius) {
-						this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					if (this.pos.y<0) {
+						this.disposal=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.visMesh.position.copy(this.pos);
+					this.visMesh.geometry.computeBoundingSphere();
+				}
+			}
+
+
+
+			// ------------------------------------------------------------------
+
+			// ------------------------------------------------------------------
+			class Shot {
+				constructor(pos, radius, vel, mass, power)
+				{
+					// physics data 
+					this.isShot=true;
+                    this.pos = pos;
+                    this.radius = radius;
+                    this.vel = vel;
+					this.grabbed = false;
+					this.disposal= false;
+					this.mass=mass;
+					this.power=power;
+
+					// visual mesh
+
+                    var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+                    var material = new THREE.MeshPhongMaterial({color: 0xff0000});
+                    this.visMesh = new THREE.Mesh( geometry, material );
+					this.visMesh.position.copy(pos);
+					this.visMesh.userData = this;		// for raycasting
+					this.visMesh.layers.enable(1);
+					gThreeScene.add(this.visMesh);
+				}
+			
+				propagate(sdt)
+				{
+					if (this.grabbed)
+						return;
+
+					// this.vel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.pos.addScaledVector(this.vel, sdt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.pos.x < -size.x) {
+						this.pos.x = -size.x; this.vel.x = -this.vel.x;
+					}
+					if (this.pos.x >  size.x) {
+						this.pos.x =  size.x; this.vel.x = -this.vel.x;
+					}
+					// if (this.pos.z < -size.z) {
+					// 	this.pos.z = -size.z; this.vel.z = -this.vel.z;
+					// }
+					// if (this.pos.z >  size.z) {
+					// 	this.pos.z =  size.z; this.vel.z = -this.vel.z;
+					// }
+					if (this.pos.y>6) {
+						this.disposal=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
 					}
 
 					this.visMesh.position.copy(this.pos);
 					this.visMesh.geometry.computeBoundingSphere();
 				}
 
-				startGrab(pos) 
-				{
-					this.grabbed = true;
-					this.pos.copy(pos);
-					this.visMesh.position.copy(pos);
-				}
+				// startGrab(pos) 
+				// {
+				// 	this.grabbed = true;
+				// 	this.pos.copy(pos);
+				// 	this.visMesh.position.copy(pos);
+				// }
 
-				moveGrabbed(pos, vel) 
-				{
-					this.pos.copy(pos);
-					this.visMesh.position.copy(pos);
-				}
+				// moveGrabbed(pos, vel) 
+				// {
+				// 	this.pos.copy(pos);
+				// 	this.visMesh.position.copy(pos);
+				// }
 
-				endGrab(pos, vel) 
-				{
-					this.grabbed = false;
-					this.vel.copy(vel);
-				}				
+				// endGrab(pos, vel) 
+				// {
+				// 	this.grabbed = false;
+				// 	this.vel.copy(vel);
+				// }				
 			}
+			
 
 			// ------------------------------------------------------------------
-			function initPhysics() 
-			{
-				var radius = 0.2;
-				var pos = new THREE.Vector3(radius, 1.0, radius);
+			// function initPhysics() 
+			// {
+				// var radius = 0.2;
+				// var pos = new THREE.Vector3(0.0, 1.0, 1,0);
 //				var vel = new THREE.Vector3(2.0, 5.0, 3.0);
-				var vel = new THREE.Vector3();
+				// var vel = new THREE.Vector3();
 				
-				gPhysicsScene.objects.push(new Ball(pos, radius, vel)); 
+				// gPhysicsScene.objects.push(new Ball(pos, radius, vel)); 
+			// }
+
+
+			function removeShots(){
+				for (var i = 0; i < gPhysicsScene.shots.length; i++){
+					if (gPhysicsScene.shots[i].disposal==true){
+						let value=gPhysicsScene.shots[i];
+						gPhysicsScene.shots[i].visMesh.visible = false;
+						gPhysicsScene.shots = gPhysicsScene.shots.filter(item => item !== value);
+					}
+				}
+			}
+			
+
+			function removeColliders(){
+				// if length of conObj disposalMap is zero remove it, otherwise
+				for (var i = 0; i < gPhysicsScene.colliders.length; i++){
+					for (var j = 0; j < gPhysicsScene.colliders[i].elements.length; j++){
+
+						if (gPhysicsScene.colliders[i].elements[j].disposal==true){
+							let value=gPhysicsScene.colliders[i].grid[j];
+							gPhysicsScene.colliders[i].grid.children[j].visible = false;
+							// gPhysicsScene.colliders = gPhysicsScene.colliders.filter(item => item !== value);
+						}
+					}
+					// this removres conObj
+					if (gPhysicsScene.colliders[i].disposal==true){
+						let value=gPhysicsScene.colliders[i];
+					gPhysicsScene.colliders = gPhysicsScene.colliders.filter(item => item !== value);
+					}
+				}
 			}
 
 			// ------------------------------------------------------------------
-			function simulate() 
+			
+			function propagate(sdt) 
 			{
 				if (gPhysicsScene.paused)
 					return;
-				for (var i = 0; i < gPhysicsScene.objects.length; i++)
-					gPhysicsScene.objects[i].simulate();
+				for (var i = 0; i < gPhysicsScene.shots.length; i++)
+					gPhysicsScene.shots[i].propagate(sdt);
 
-				gGrabber.increaseTime(gPhysicsScene.dt);
+				for (var i = 0; i < gPhysicsScene.colliders.length; i++)
+					gPhysicsScene.colliders[i].propagate(sdt);
+
+					gGrabber.increaseTime(sdt);
+					gGenerator.increaseTime(sdt);
 			}
 
 			// ------------------------------------------
@@ -224,33 +971,85 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 				gThreeScene.add(gCamera);
 
-				gCameraControl = new THREE.OrbitControls(gCamera, gRenderer.domElement);
-				gCameraControl.zoomSpeed = 2.0;
-    			gCameraControl.panSpeed = 0.4;
+				// gCameraControl = new THREE.OrbitControls(gCamera, gRenderer.domElement);
+				// gCameraControl.zoomSpeed = 2.0;
+    			// gCameraControl.panSpeed = 0.4;
 
 				// grabber
-
-				gGrabber = new Grabber();
+				gGenerator= new ColliderGenerator(gPhysicsScene);
+				gGrabber = new Grabber(gPhysicsScene);
 				container.addEventListener( 'pointerdown', onPointer, false );
 				container.addEventListener( 'pointermove', onPointer, false );
 				container.addEventListener( 'pointerup', onPointer, false );
 			}
 
+			// collider generator
+			class ColliderGenerator {
+				constructor(physicsScene) {
+					this.time = 0.0;
+					this.generatorClock=physicsScene.colliderGeneratorClock;
+					this.radius=physicsScene.colliderGeneratorRadius;
+					this.mass=physicsScene.colliderGeneratorMass;
+					this.life=physicsScene.colliderGeneratorLife;
+					this.speed=physicsScene.colliderSpeed;
+				}
+
+				increaseTime(dt) {
+					this.time += dt;
+					if (this.time>this.generatorClock){
+						this.generateCollider();
+						this.time=0;
+					}
+					
+				}
+				generateCollider(){
+
+					let centerRot=0;
+					let centerRotVel=0;
+					let H=5; 
+					let W=5; 
+					let totalElements=H*W;
+					let disposalIn = new Array(totalElements).fill(false);
+					let massIn = new Array(totalElements).fill(this.mass);
+					let lifeIn = new Array(totalElements).fill(this.life);
+
+					gPhysicsScene.colliders.push(new ConObject0(new THREE.Vector3(0,2.5,gPhysicsScene.zPlane), new THREE.Vector3(0,this.speed,0), centerRot, centerRotVel, massIn, lifeIn, disposalIn, H,W,  this.radius, false, null, null)); 
+
+					// gPhysicsScene.colliders.push(new ConObject(new THREE.Vector3(0,2.5,gPhysicsScene.zPlane), this.radius, new THREE.Vector3(0,this.speed,0), this.mass, this.life)); 
+					// constructor( centerPos, radius, centerVel, massMap, life)
+				}
+			}
+
 			// ------- grabber -----------------------------------------------------------
 
 			class Grabber {
-				constructor() {
+				constructor(physicsScene) {
 					this.raycaster = new THREE.Raycaster();
 					this.raycaster.layers.set(1);
 					this.raycaster.params.Line.threshold = 0.1;
 					this.physicsObject = null;
-					this.distance = 0.0;
+					this.planeDistance = -2;
 					this.prevPos = new THREE.Vector3();
-					this.vel = new THREE.Vector3();
+					// this.vel = new THREE.Vector3();
 					this.time = 0.0;
+					this.shotClock=physicsScene.shotClock;
+					this.fireOn=false;
+					this.radius=physicsScene.shotRadius;
+					this.vel = new THREE.Vector3(0,physicsScene.shotSpeed,0);
+					this.mass=physicsScene.shotMass;
+					this.power=physicsScene.shotPower;
 				}
+				// method change weapon
+				// udate shotClock, radius, vel, mass, power
+
 				increaseTime(dt) {
+					if (this.fireOn==true){
 					this.time += dt;
+					if (this.time>this.shotClock){
+						this.fire();
+						this.time=0;
+					}
+					}
 				}
 				updateRaycaster(x, y) {
 					var rect = gRenderer.domElement.getBoundingClientRect();
@@ -263,45 +1062,63 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 					this.physicsObject = null;
 					this.updateRaycaster(x, y);
 					var intersects = this.raycaster.intersectObjects( gThreeScene.children );
-					if (intersects.length > 0) {
-						var obj = intersects[0].object.userData;
-						if (obj) {
-							this.physicsObject = obj;
-							this.distance = intersects[0].distance;
-							var pos = this.raycaster.ray.origin.clone();
-							pos.addScaledVector(this.raycaster.ray.direction, this.distance);
-							this.physicsObject.startGrab(pos);
-							this.prevPos.copy(pos);
-							this.vel.set(0.0, 0.0, 0.0);
-							this.time = 0.0;
-							if (gPhysicsScene.paused)
-								run();
-						}
-					}
+					this.fireOn=true;
+					this.time=0;
+					this.fire();
+
+					// if (intersects.length > 0) {
+					// 	var obj = intersects[0].object.userData;
+					// 	if (obj) {
+					// 		this.physicsObject = obj;
+					// 		this.distance = intersects[0].distance;
+					// 		var pos = this.raycaster.ray.origin.clone();
+					// 		pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+					// 		this.physicsObject.startGrab(pos);
+					// 		this.prevPos.copy(pos);
+					// 		this.vel.set(0.0, 0.0, 0.0);
+					// 		this.time = 0.0;
+					// 		if (gPhysicsScene.paused)
+					// 			run();
+					// 	}
+					// }
 				}
 				move(x, y) {
-					if (this.physicsObject) {
+					// if (this.physicsObject) {
 						this.updateRaycaster(x, y);
-						var pos = this.raycaster.ray.origin.clone();
-						pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+						// var pos = this.raycaster.ray.origin.clone();
+						// pos.addScaledVector(this.raycaster.ray.direction, this.distance);
 
-						this.vel.copy(pos);
-						this.vel.sub(this.prevPos);
-						if (this.time > 0.0)
-							this.vel.divideScalar(this.time);
-						else
-							vel.set(0.0, 0.0, 0.0);
-						this.prevPos.copy(pos);
-						this.time = 0.0;
+						// this.vel.copy(pos);
+						// this.vel.sub(this.prevPos);
+						// if (this.time > 0.0)
+						// 	this.vel.divideScalar(this.time);
+						// else
+						// 	vel.set(0.0, 0.0, 0.0);
+						// this.prevPos.copy(pos);
+						// this.time = 0.0;
 
-						this.physicsObject.moveGrabbed(pos, this.vel);
-					}
+						// this.physicsObject.moveGrabbed(pos, this.vel);
+					// }
 				}
 				end(x, y) {
-					if (this.physicsObject) { 
-						this.physicsObject.endGrab(this.prevPos, this.vel);
-						this.physicsObject = null;
-					}
+					this.fireOn=false;
+					// if (this.physicsObject) { 
+					// 	this.physicsObject.endGrab(this.prevPos, this.vel);
+					// 	this.physicsObject = null;
+					// }
+				}
+				fire(){
+					var pos = this.raycaster.ray.origin.clone();
+					var plane= new THREE.Plane(new THREE.Vector3( 0, 0, 1 ),this.planeDistance)
+					var pointVec=new THREE.Vector3()
+					this.raycaster.ray.intersectPlane(plane,pointVec)
+					pos.addScaledVector(pointVec,1);
+
+						// pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+						// var vel = new THREE.Vector3(0,3,0);
+						// var radius = 0.2;
+
+					gPhysicsScene.shots.push(new Shot(pointVec, this.radius, this.vel, this.mass, this.power)); 
 				}
 			}			
 
@@ -311,21 +1128,27 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				if (evt.type == "pointerdown") {
 					gGrabber.start(evt.clientX, evt.clientY);
 					gMouseDown = true;
-					if (gGrabber.physicsObject) {
-						gCameraControl.saveState();
-						gCameraControl.enabled = false;
-					}
+					// if (gGrabber.physicsObject) {
+						// gCameraControl.saveState();
+						// gCameraControl.enabled = false;
+					// }
+					var radius = 0.2;
+				// var pos = new THREE.Vector3(evt.clientX, evt.clientY, 1,0);
+//				var vel = new THREE.Vector3(2.0, 5.0, 3.0);
+				// var vel = new THREE.Vector3();
+				// 	gPhysicsScene.objects.push(new Ball(pos, radius, vel)); 
+
 				}
 				else if (evt.type == "pointermove" && gMouseDown) {
 					gGrabber.move(evt.clientX, evt.clientY);
 				}
 				else if (evt.type == "pointerup") {
-					if (gGrabber.physicsObject) {
+					// if (gGrabber.physicsObject) {
 						gGrabber.end();
-						gCameraControl.reset();
-					}
+						// gCameraControl.reset();
+					// }
 					gMouseDown = false;
-					gCameraControl.enabled = true;
+					// gCameraControl.enabled = true;
 				}
 			}	
 			
@@ -350,19 +1173,269 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			function restart() {
 				location.reload();
 			}
+
+
+			function handle2ConObjCollision(conObj, conObj2, restitution) 
+			{
+
+				if (conObj.disposal==true){
+						return;
+						// check
+				}
+				if (conObj2.disposal==true){
+						return;
+						// check
+				}
+			
+
+
+				// for loop here
+				for (var j = 0; j < conObj2.posMap.length; j++) {
+					if (conObj2.disposalMap[j]==true)
+						continue;
+						for (var k = 0; k < conObj.posMap.length; k++) {
+							if (conObj.disposalMap[k]==true)
+							continue;
+
+				var dir1 = new THREE.Vector3();
+				dir1.subVectors(new THREE.Vector3(conObj2.currPosXs[j],conObj2.currPosYs[j], 2), new THREE.Vector3(conObj.currPosXs[k],conObj.currPosYs[k], 2));
+				var d = dir1.length();
+				if (d == 0.0 || d > conObj2.radius + conObj.radius)
+					continue;
+				
+				// dir.multiplyScalar(1.0 / d);
+
+				var corr = (conObj2.radius + conObj.radius - d) / 2.0;
+				dir1.multiplyScalar(corr / d);
+
+				conObj.pos.sub(dir1);
+				conObj2.pos.add(dir1);
+
+				var v1 = conObj.centerVel.dot(dir1);
+				var v2 = conObj2.centerVel.dot(dir1);
+
+				var m1 = conObj.totalMass;
+				var m2 = conObj2.totalMass;
+
+				var newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
+				var newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
+				var dir2=dir1.clone();
+				var dir1damage=dir1.clone();
+				var dir2damage=dir1.clone();
+
+
+				// adding dir scaled by newV1 - v1 to ball1.vel
+				conObj.centerVel.add(dir1.multiplyScalar(newV1 - v1));
+				// adding dir scaled by newV2 - v2 to ball2.vel
+				conObj2.centerVel.add(dir2.multiplyScalar(newV2 - v2));
+				
+				
+				// this is because ball2 is collider or shot
+
+				//collider collider coll
+				let b1d=conObj.dFactor*dir1damage.multiplyScalar(newV1 - v1).length();
+				let b2d=conObj.dFactor*dir2damage.multiplyScalar(newV2 - v2).length();
+				let currLife2=conObj2.lifeMap[j]
+				let currLife=conObj.lifeMap[k]
+
+
+				conObj2.lifeMap[j]=currLife2-b1d;
+				conObj.lifeMap[k]=currLife-b1d;
+				if (conObj2.lifeMap[j]<=0){
+						conObj2.disposalMap[j]=true;
+					}
+				if (conObj.lifeMap[k]<=0){
+					conObj.disposalMap[k]=true;
+				}
+				// ball1.life=ball1.life-b1d;
+				// ball2.life=ball2.life-b2d;
+
+				// collider collider collision 
+				// means damage is factor x speed mass
+					
+
+					}
+				}
+
+			}
+
+
+			function handleBallConObjCollision(ball1, conObj, restitution) 
+			{
+
+				if (isNaN(conObj.centerPos.x)){
+					let maga=1;
+				}
+
+				if (ball1.disposal==true){
+						return;
+				}
+				if (conObj.disposal==true){
+						return;
+				}
+			
+				// for loop here
+				for (var j = 0; j < conObj.elements.length; j++) {
+					if (conObj.elements[j].disposal==true)
+						continue;
+				var dir0 = new THREE.Vector3();
+				dir0.subVectors(new THREE.Vector3(conObj.elements[j].xPosGlo,conObj.elements[j].yPosGlo, 2), ball1.pos);
+				var d = dir0.length();
+				dir0.normalize();
+				if (d == 0.0 || d > ball1.radius + conObj.radius)
+					continue;
+
+				var dir1 = new THREE.Vector3();
+				dir1.subVectors(conObj.centerPos, ball1.pos);
+				
+				var corr = (ball1.radius + conObj.radius - d) / 2.0;
+				ball1.pos.addScaledVector(dir0,-corr);
+				conObj.centerPos.addScaledVector(dir0,corr);
+
+				var v1 = ball1.vel.dot(dir1);
+				var v2 = conObj.centerVel.dot(dir1);
+
+				var m1 = ball1.mass;
+				var m2 = conObj.totalMass;
+
+				var newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
+				var newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
+				var dir2=dir1.clone();
+				// var dir1damage=dir1.clone();
+				// var dir2damage=dir1.clone();
+
+				// ball1.vel.addScaledVector(dir1,newV1 - v1);
+				conObj.centerVel.addScaledVector(dir2,newV2 - v2);
+				if (isNaN(conObj.centerVel.x)){
+					let maga=1;
+				}
+				// adding dir scaled by newV1 - v1 to ball1.vel
+				// ball1.vel.add(dir1.multiplyScalar(newV1 - v1));
+				// adding dir scaled by newV2 - v2 to ball2.vel
+				// conObj.centerVel.add(dir2.multiplyScalar(newV2 - v2));
+				
+				
+				// this is because ball2 is collider or shot
+				// in this version  ball
+				if (ball1.isShot==true){
+					let currLife=conObj.elements[j].life
+					conObj.elements[j].life=currLife-ball1.power;
+					if (conObj.elements[j].life<=1e-6){
+						conObj.elements[j].disposal=true;
+						conObj.adjudicateCheck=true;
+					}
+				
+					// todo shot needs life
+					if (ball1.disposal==false){
+						ball1.disposal=true;
+					}
+			}  else {
+				//collider collider coll
+				// let b1d=ball1.dFactor*dir1damage.multiplyScalar(newV1 - v1).length();
+				// let b2d=ball2.dFactor*dir2damage.multiplyScalar(newV2 - v2).length();
+
+				// ball1.life=ball1.life-b1d;
+				// ball2.life=ball2.life-b2d;
+
+				// collider collider collision 
+				// means damage is factor x speed mass
+			}
+
+        }
+
+		
+
+
+				// ball2.vel.addVectors(dir, newV2 - v2);	
+				// if ball1 is shot, dispose ?  
+
+			}
+
+
+
+			
 			
 			// make browser to call us repeatedly -----------------------------------
 
-			function update() {
-				simulate();
-				gRenderer.render(gThreeScene, gCamera);
-				requestAnimationFrame(update);
+			function browserUpdate() {
+
+				var sdt = gPhysicsScene.dt / gPhysicsScene.numSubSteps;
+
+				for (var step = 0; step < gPhysicsScene.numSubSteps; step++) {
+				propagate(sdt);
+
+				// for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+				// 	for (j = i+1; j < gPhysicsScene.colliders.length; j++) {
+				// 	handleBallCollision(gPhysicsScene.colliders[i],gPhysicsScene.colliders[j]);
+				// 	}
+				// }
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					for (j = 0; j < gPhysicsScene.shots.length; j++) {
+						let elasticy=1;
+						handleBallConObjCollision(gPhysicsScene.shots[j],gPhysicsScene.colliders[i],elasticy);
+					}
+				}
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					for (j = 0; j < gPhysicsScene.colliders.length; j++) {
+						let elasticy=1;
+				//  handle2ConObjCollision(gPhysicsScene.colliders[i],gPhysicsScene.colliders[j],elasticy);
+					}
+				}
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					gPhysicsScene.colliders[i].update()
+				}
+
+				if (gPhysicsScene.newColliders.length>1){
+					let momu=1;
+				}
+
+			for (i = 0; i < gPhysicsScene.newColliders.length; i++) {
+
+				if (gPhysicsScene.newColliders[i].massIn.length==0){
+					let mamu=1;
+				}
+
+
+				gPhysicsScene.colliders.push(new ConObject0(gPhysicsScene.newColliders[i].centerPos, gPhysicsScene.newColliders[i].centerVel, gPhysicsScene.newColliders[i].centerRot, gPhysicsScene.newColliders[i].centerRotVel, gPhysicsScene.newColliders[i].massIn, gPhysicsScene.newColliders[i].lifeIn, gPhysicsScene.newColliders[i].disposalIn, gPhysicsScene.newColliders[i].H, gPhysicsScene.newColliders[i].W,  gPhysicsScene.newColliders[i].radius, true, gPhysicsScene.newColliders[i].xPosRel, gPhysicsScene.newColliders[i].yPosRel)); 
+				gPhysicsScene.newColliders.splice(i,1)
 			}
-			
+				// handle ball shot collisions
+				removeShots();
+				removeColliders();
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					if (gPhysicsScene.colliders[i].justCreated==true){
+						gPhysicsScene.colliders[i].justCreated=false;
+					} else {
+					if (gPhysicsScene.colliders[i].disposal==true){
+						gPhysicsScene.colliders.splice(i,1);
+					}
+				}
+				}
+
+			}
+				gRenderer.render(gThreeScene, gCamera);
+				requestAnimationFrame(browserUpdate);
+					
+				}
+
+
 			initThreeScene();
 			onWindowResize();
-			initPhysics();
-			update();
+			// initPhysics();
+			browserUpdate();
+
+		function sortWithIndex(arr) {
+  			const indexedArray = arr.map((value, index) => ({ value, index }));
+  			indexedArray.sort((a, b) => a.value - b.value);
+  			const sortedIndices = indexedArray.map(item => item.index);
+			return sortedIndices;
+			}
+		
+			
 			
 		</script>
 	</body>

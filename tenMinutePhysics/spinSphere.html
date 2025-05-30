@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid of Spheres</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const centerPoint = new THREE.Vector3(0, 0, 0);
+        const gridSpacing = 1;
+        const gridDimensions = 3;
+
+        const spheres = [];
+
+        for (let i = -gridDimensions; i <= gridDimensions; i++) {
+            for (let j = -gridDimensions; j <= gridDimensions; j++) {
+                const sphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+                const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+
+                sphere.position.set(i * gridSpacing, j * gridSpacing, 0);
+                scene.add(sphere);
+                spheres.push(sphere);
+            }
+        }
+
+        camera.position.z = 10;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            spheres.forEach((sphere) => {
+                const distance = sphere.position.distanceTo(centerPoint);
+                const angle = distance * 0.0;
+                sphere.position.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

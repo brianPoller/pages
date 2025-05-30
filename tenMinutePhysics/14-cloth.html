@@ -14,7 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <html lang="en">
 	<head>
-		<title>Cloth Simulation</title>
+		<title>My Funny Cloth Simulation</title>
 		<style>
 			body {
 				font-family: verdana; 
@@ -34,7 +34,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	
 	<body>
 
-        <h1>Cloth Simulation</h1> 
+        <h1>My Super Cloth Simulation</h1> 
 		<button id = "buttonRun" onclick="run()" class="button">Run</button>
 		<button onclick="restart()" class="button">Restart</button>
 		<input type = "checkbox" onclick = "onShowEdges()"> Show edges</p>
@@ -52,7 +52,347 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         
         <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
         <script src="https://unpkg.com/three@0.139.2/examples/js/controls/OrbitControls.js"></script>
+		<!-- <script type ="module"> 
+		 import {createCloth} from "index.js";
+		//  window.createClothImported=function createClothImported(){
+			// createCloth()
+		//  }
+		 </script>
+		<script type ="module"> 
+		import {LCGD} from "index.js";  
+		window.LCGD=LCGD;
+		</script> -->
+
+		<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script> -->
+		<!-- <script src=https://cdnjs.cloudflare.com/ajax/libs/mathjs/3.3.0/math.min.js></script> -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.2.0/math.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+		<script src="https://unpkg.com/delaunator@5.0.0/delaunator.min.js"></script>
+
+
+
 		<script>
+
+
+ function createCloth(ballSpaceX, ballSpaceY, ppDxI, ppDyI, ppDzI, clothScale, TW, TH, sleeve1, sleeve2, collar1, collar2, maxTriangleSize) {
+    // let TWaspect= 0.7;
+    // let sleeve1Aspect=0.6; //height of sleeve
+    // let sleeve2Aspect=0.5; // length of sleeve
+    // let sleeve3Aspect=1-sleeve1Aspect;
+    // let collar1Aspect=0.3; // width collar
+    // let collar2Aspect=0.5;
+    //input: TW TH sleeve1 sleeve2 collar1 collar2
+    // cloth is made by drawing outline
+    const data0 = {
+        type: "FeatureCollection",
+        features: [{
+                "type": "Feature",
+                "properties": {
+                    "category": 0,
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                            // [ppDxI - TW / 2, ppDyI - TH],
+                            // [ppDxI - TW / 2, ppDyI - TH + sleeve1],
+                            // [ppDxI - (TW / 2 + sleeve2), ppDyI - TH + sleeve1],
+                            // [ppDxI - (TW / 2 + sleeve2), ppDyI],
+                            // [ppDxI - collar1 / 2, ppDyI],
+                            // [ppDxI - collar1 / 2, ppDyI - collar2],
+                            // [ppDxI + collar1 / 2, ppDyI - collar2],
+                            // [ppDxI + collar1 / 2, ppDyI],
+                            // [ppDxI + TW / 2 + sleeve2, ppDyI],
+                            // [ppDxI + TW / 2 + sleeve2, ppDyI - TH + sleeve1],
+                            // [ppDxI + TW / 2, ppDyI - TH + sleeve1],
+                            // [ppDxI + TW / 2, ppDyI - TH],
+                            [ppDxI - TW/2, ppDyI - TH/2],
+                            [ppDxI - TW/2, ppDyI + TH/2],
+                            [ppDxI + TW/2, ppDyI + TH/2],
+							[ppDxI + TW/2, ppDyI - TH/2],
+                        ]]
+                }
+            }]
+    };
+    // create grid points 
+    let gridPointsOutput = createGridPoints(data0, ballSpaceX, ballSpaceY, ppDzI); //get points array
+    let points3d = gridPointsOutput.points3d;
+    let histogramX = gridPointsOutput.histogramX;
+    let indexValX = gridPointsOutput.indexX;
+    let indexValY = gridPointsOutput.indexY;
+    let clothLinks = gridPointsOutput.links;
+    let stitchIndexX = [];
+    for (var i = 0; i < (histogramX.length - 2); i++) {
+        let diffVal = math.abs(histogramX[i + 1] - histogramX[i]);
+        if (diffVal > 0) {
+            stitchIndexX.push(indexValX[i]);
+            stitchIndexX.push(indexValX[i + 1]);
+        }
+    }
+    let histogramY = gridPointsOutput.histogramY;
+    let stitchIndexY = [];
+    for (var i = 2; i < (histogramY.length - 2); i++) {
+        let diffVal = math.abs(histogramY[i + 1] - histogramY[i]);
+        if (diffVal > 0) {
+            stitchIndexY.push(indexValY[i]);
+            stitchIndexY.push(indexValY[i + 1]);
+        }
+    }
+    // for stitching location attribution
+    // --x will have 2 changes identifying sleeves
+    // y should have 1 below sleeves, then sleeve bottom
+    // achieved stitching
+    let output = createGeometry(points3d, maxTriangleSize);
+    let indices = output.indices;
+    let newPoints = output.points;
+    const nBalls = newPoints.length;
+    let firstCloth = true;
+    let pointsPos = new Float32Array(3 * nBalls);
+    // need additional joints- for pointPos index is 1 2 3
+    // need for x for loop
+    let minX = 1000;
+    let minY = 1000;
+    let maxX = -1000;
+    let maxY = -1000;
+    for (var i = 0; i < (nBalls); i++) {
+        let positionX = newPoints[i].x;
+        let positionY = newPoints[i].y;
+        let positionZ = newPoints[i].z;
+        pointsPos[3 * i] = positionX;
+        pointsPos[3 * i + 1] = positionY;
+        pointsPos[3 * i + 2] = positionZ;
+        if (positionX < minX) {
+            minX = positionX;
+        }
+        if (positionX > maxX) {
+            maxX = positionX;
+        }
+        if (positionY < minY) {
+            minY = positionY;
+        }
+        if (positionY > maxY) {
+            maxY = positionY;
+        }
+    }
+    let nIndices = indices.length;
+    var allLinks = new Array(nIndices + clothLinks.length);
+    // var allLinks=new Array(nIndices);
+    const nUniqueBallLinks = new Float32Array(nBalls);
+    var allLinksSorted = new Array(nIndices);
+    // follow trimesh traingle index pattern ABC BCA & CAB
+    Array.from({ length: nIndices + clothLinks.length }).map((_, i) => (
+    //  Array.from({ length: nIndices }).map((_, i) =>(
+    allLinks[i] = new Array()));
+    Array.from({ length: nIndices / 3 }).map((_, i) => (allLinks[3 * i].push([indices[3 * i], indices[3 * i + 1]])));
+    Array.from({ length: nIndices / 3 }).map((_, i) => (allLinks[3 * i + 1].push([indices[3 * i + 1], indices[3 * i + 2]])));
+    Array.from({ length: nIndices / 3 }).map((_, i) => (allLinks[3 * i + 2].push([indices[3 * i + 2], indices[3 * i]])));
+    Array.from({ length: clothLinks.length }).map((_, i) => (allLinks[nIndices + i].push([clothLinks[i][0], clothLinks[i][1]])));
+    Array.from({ length: allLinks.length }).map((_, i) => (allLinksSorted[i] = (allLinks[i][0][0] > allLinks[i][0][1]) ? [allLinks[i][0][0], allLinks[i][0][1]] : [allLinks[i][0][1], allLinks[i][0][0]]));
+    // need to sort links, remove reduncies as each link becomes joint
+    let uniqueLinks = multiDimensionalUnique(allLinksSorted);
+    var uniqueBallLinks = new Array(nBalls);
+    Array.from({ length: nBalls }).map((_, i) => (uniqueBallLinks[i] = new Array()));
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (uniqueBallLinks[uniqueLinks[i][0]].push(uniqueLinks[i][1])));
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (nUniqueBallLinks[uniqueLinks[i][0]] = nUniqueBallLinks[uniqueLinks[i][0]] + 1));
+    const lengthLinksX = new Float32Array(uniqueLinks.length);
+    const lengthLinksY = new Float32Array(uniqueLinks.length);
+    const lengthLinksZ = new Float32Array(uniqueLinks.length);
+    const lengthLinks = new Float32Array(uniqueLinks.length);
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (lengthLinksX[i] = math.subtract(pointsPos[3 * uniqueLinks[i][1]], pointsPos[3 * uniqueLinks[i][0]])));
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (lengthLinksY[i] = math.subtract(pointsPos[3 * uniqueLinks[i][1]] + 1, pointsPos[3 * uniqueLinks[i][0] + 1])));
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (lengthLinksZ[i] = math.subtract(pointsPos[3 * uniqueLinks[i][1]] + 2, pointsPos[3 * uniqueLinks[i][0] + 2])));
+    Array.from({ length: uniqueLinks.length }).map((_, i) => (lengthLinks[i] = math.norm([lengthLinksX[i], lengthLinksY[i], lengthLinksZ[i]])));
+    // output return nBalls pointsPos uniqueBallLinks
+    return { nBallsOut: nBalls, pointsPosOut: pointsPos, uniqueBallLinksOut: uniqueBallLinks,
+        indicesOut: indices, nUniqueBallLinksOut: nUniqueBallLinks, minX: minX, maxX: maxX, minY: minY, maxY: maxY,
+        stitchIndexX: stitchIndexX, stitchIndexY: stitchIndexY, nLinks: uniqueLinks.length, lengthLinks: lengthLinks };
+}
+
+ function createGridPoints(data, ballSpaceX, ballSpaceY, ppDz) {
+    const districtData = data.features[0];
+    // 1.1 Caculate the extent of your shape coordinate
+    const extent = turf.bbox(districtData);
+    const minX = extent[0];
+    const maxX = extent[2];
+    const minY = extent[1];
+    const maxY = extent[3];
+    let gridPoints = [];
+    let clothWidth = maxX - minX;
+    let clothHeight = maxY - minY;
+    let stepSizeX = clothWidth / (ballSpaceX - 1);
+    let stepSizeY = clothHeight / (ballSpaceY - 1);
+    const nBinsX = math.ceil(ballSpaceX);
+    const histogramX = new Array(nBinsX).fill(0);
+    // const indexX = [];//new Array(binsX).fill(0);
+    const nBinsY = math.ceil(ballSpaceY);
+    const histogramY = new Array(nBinsY).fill(0);
+    // const indexY = [];//new Array(binsX).fill(0);
+    const histogramXvals = new Array(nBinsX).fill(0);
+    // for (const item of data) {
+    //     histogram[Math.floor((item - minX) / stepSizeX)]++;
+    // }
+    // for(let i = 0; i < (ballSpaceX+1); i++) {
+    //   let ballPosX=minX+stepSizeX*i -stepSizeX/2;
+    //   indexX.push(ballPosX)
+    // }
+    // for(let i = 0; i < (ballSpaceY+1); i++) {
+    //   let ballPosY=minY+stepSizeY*i - stepSizeY/2;
+    //   indexY.push(ballPosY)
+    // }
+    // 1.2 Create an array of coordinates with a  fixed intervals in x and y direction.
+    for (let i = 0; i < (ballSpaceX + 1); i++) {
+        for (let j = 0; j < (ballSpaceY + 1); j++) {
+            let ballPosX = minX + stepSizeX * i - stepSizeX / 2;
+            let ballPosY = minY + stepSizeY * j - stepSizeY / 2;
+            gridPoints.push([ballPosX, ballPosY]);
+        }
+    }
+    gridPoints = turf.points(gridPoints);
+    const points3d = [];
+    // 2.1 Finds Points that fall within shape(polygon)
+    const inPoint = turf.pointsWithinPolygon(gridPoints, districtData).features;
+    gridPointLength = inPoint.length;
+    // get all x and y vals then unique and sort
+    //
+    const xValsRaw = [];
+    const yValsRaw = [];
+    inPoint.forEach((point, ii) => {
+        const coordinates = point.geometry.coordinates;
+        xValsRaw.push(coordinates[0]);
+        yValsRaw.push(coordinates[1]);
+        points3d.push(new THREE.Vector3(coordinates[0], coordinates[1], ppDz));
+        //TODO not working correctly for hist8 should be 8 8 ... but get 16 0 ...
+        histogramX[math.floor(math.divide(math.subtract(coordinates[0], minX), stepSizeX))]++;
+        histogramY[math.floor(math.divide(math.subtract(coordinates[1], minY), stepSizeY))]++;
+    });
+    let indexX = multiDimensionalUnique(xValsRaw).sort((a, b) => a - b);
+    let indexY = multiDimensionalUnique(yValsRaw).sort((a, b) => a - b);
+    let minX0 = indexX[0];
+    let minY0 = indexY[0];
+    let linkMap = Array(indexX.length + 2).fill().map(() => Array(indexY.length + 2).fill(0));
+    inPoint.forEach((point, ii) => {
+        const coordinates = point.geometry.coordinates;
+        let xcoord = math.floor(math.divide(math.subtract(coordinates[0], minX), stepSizeX)) + 1;
+        let ycoord = math.floor(math.divide(math.subtract(coordinates[1], minY), stepSizeY)) + 1;
+        linkMap[xcoord][ycoord] = ii;
+    });
+    let links = [];
+    for (let i = 0; i < (indexX.length + 2); i++) {
+        for (let j = 0; j < (indexY.length + 2); j++) {
+            if (linkMap[i][j] != 0) {
+                if (linkMap[i][j + 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i][j + 1]]);
+                }
+                if (linkMap[i + 1][j + 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i + 1][j + 1]]);
+                }
+                if (linkMap[i + 1][j] != 0) {
+                    links.push([linkMap[i][j], linkMap[i + 1][j]]);
+                }
+                if (linkMap[i + 1][j - 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i + 1][j - 1]]);
+                }
+                if (linkMap[i][j - 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i][j - 1]]);
+                }
+                if (linkMap[i - 1][j - 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i - 1][j - 1]]);
+                }
+                if (linkMap[i - 1][j] != 0) {
+                    links.push([linkMap[i][j], linkMap[i - 1][j]]);
+                }
+                if (linkMap[i - 1][j + 1] != 0) {
+                    links.push([linkMap[i][j], linkMap[i - 1][j + 1]]);
+                }
+            }
+        }
+    }
+    // 2.2 Push all shape points to the points array.
+    switch (districtData.geometry.type) {
+        case "Broken?Polygon":
+            traversePolygon(districtData.geometry.coordinates, point => {
+                points3d.push(new THREE.Vector3(point[0], point[1], 0));
+            });
+            break;
+        case "MultiPolygon":
+            traverseMultiPolygon(districtData.geometry.coordinates, point => {
+                points3d.push(new THREE.Vector3(point[0], point[1], 0));
+            });
+            break;
+    }
+    return { points3d: points3d, histogramX: histogramX, indexX: indexX, histogramY: histogramY, indexY: indexY, links: links };
+    // return points3d;
+}
+ function multiDimensionalUnique(arr) {
+    var uniques = [];
+    var itemsFound = {};
+    for (var i = 0, l = arr.length; i < l; i++) {
+        var stringified = JSON.stringify(arr[i]);
+        if (itemsFound[stringified]) {
+            continue;
+        }
+        uniques.push(arr[i]);
+        itemsFound[stringified] = true;
+    }
+    return uniques;
+}
+ function traversePolygon(polygons, callback) {
+    polygons.forEach(polygon => {
+        polygon.forEach(point => {
+            callback(point);
+        });
+    });
+}
+ function traverseMultiPolygon(multiPolygons, callback) {
+    multiPolygons.forEach(multiPolygon => {
+        multiPolygon.forEach(polygon => {
+            polygon.forEach(point => {
+                callback(point);
+            });
+        });
+    });
+}
+
+ function createGeometry(points3d, maxTriangleSize) {
+    // 3. Caculate the faces indices array of the points array by using Delaunator.js
+    const indexDelaunay = Delaunator.from(points3d.map(v => {
+        return [v.x, v.y];
+    }));
+    const meshIndex = [];
+    for (let i = 0; i < indexDelaunay.triangles.length; i++) {
+        meshIndex.push(indexDelaunay.triangles[i]);
+    }
+    // 4. Delete the unwanted indices
+    let filterdMeshIndex = [];
+    // 5. TODO max triangle size shouldnt be hard coded, depends on scale, nBalls
+    //  necessary to remove atifacts- unwanted connections
+    // let maxTriangleSize=8;
+    for (let i = 0; i < meshIndex.length; i += 3) {
+        let posA = points3d[meshIndex[i]];
+        let posB = points3d[meshIndex[i + 1]];
+        let posC = points3d[meshIndex[i + 2]];
+        let dAB = math.sqrt(math.pow(posA.x - posB.x, 2) + math.pow(posA.y - posB.y, 2) + math.pow(posA.z - posB.z, 2));
+        let dBC = math.sqrt(math.pow(posC.x - posB.x, 2) + math.pow(posC.y - posB.y, 2) + math.pow(posC.z - posB.z, 2));
+        let dAC = math.sqrt(math.pow(posA.x - posC.x, 2) + math.pow(posA.y - posC.y, 2) + math.pow(posA.z - posC.z, 2));
+        if (dAB < maxTriangleSize && dAC < maxTriangleSize && dBC < maxTriangleSize) {
+            filterdMeshIndex.push([meshIndex[i], meshIndex[i + 1], meshIndex[i + 2]]);
+        }
+    }
+    filterdMeshIndex = filterdMeshIndex.filter(item => {
+        const minItem = math.min(...item);
+        let flag = true;
+        if (((item[0] > item[1] && item[1] > item[2]) || (item[1] > item[2] && item[2] > item[0]) || (item[2] > item[0] && item[0] > item[1])) && minItem > gridPointLength) {
+            flag = false;
+        }
+        return flag;
+    });
+    filterdMeshIndex = filterdMeshIndex.flat(1);
+    //  console.log(filterdMeshIndex);
+    // 5. Creat buffergeometry with the points array and indices array.
+    const geometry = new THREE.BufferGeometry().setFromPoints(points3d);
+    geometry.setIndex(filterdMeshIndex);
+    geometry.computeVertexNormals();
+    return { geometry: geometry, points: points3d, indices: filterdMeshIndex };
+}
 
 			// ----- math on vector arrays -------------------------------------------------------------
 
@@ -76,12 +416,27 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				a[anr++] = b[bnr++]; 
 				a[anr]   = b[bnr];
 			}
+
+
+			function vecSet(a,anr,x,y,z) {
+				anr *= 3; 
+				a[anr++] = x; 
+				a[anr++] = y; 
+				a[anr]   = z;
+			}
 			
 			function vecAdd(a,anr, b,bnr, scale = 1.0) {
 				anr *= 3; bnr *= 3;
 				a[anr++] += b[bnr++] * scale; 
 				a[anr++] += b[bnr++] * scale; 
 				a[anr]   += b[bnr] * scale;
+			}
+
+			function vecAddEz(a,anr, bx,by,bz, scale = 1.0) {
+				anr *= 3; 
+				a[anr++] += bx * scale; 
+				a[anr++] += by * scale; 
+				a[anr]   += bz * scale;
 			}
 
 			function vecSetDiff(dst,dnr, a,anr, b,bnr, scale = 1.0) {
@@ -96,7 +451,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				let a0 = a[anr], a1 = a[anr + 1], a2 = a[anr + 2];
 				return a0 * a0 + a1 * a1 + a2 * a2;
 			}
-
+			function vecLength(a,anr) {
+				anr *= 3;
+				let a0 = a.x, a1 = a.y, a2 = a.z;
+				return Math.sqrt(a0 * a0 + a1 * a1 + a2 * a2);
+			}
 			function vecDistSquared(a,anr, b,bnr) {
 				anr *= 3; bnr *= 3;
 				let a0 = a[anr] - b[bnr], a1 = a[anr + 1] - b[bnr + 1], a2 = a[anr + 2] - b[bnr + 2];
@@ -113,7 +472,19 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				a[anr++] = b[bnr + 1] * c[cnr + 2] - b[bnr + 2] * c[cnr + 1];
 				a[anr++] = b[bnr + 2] * c[cnr + 0] - b[bnr + 0] * c[cnr + 2];
 				a[anr]   = b[bnr + 0] * c[cnr + 1] - b[bnr + 1] * c[cnr + 0];
-			}			
+			}
+			
+			function closestPointOnSegment(px,py,pz, a, b) 
+			{
+				var ab = new THREE.Vector3();
+				ab.subVectors(b, a);
+				var pdotab=px*ab.x + py*ab.y + pz*ab.z;
+				var t = ab.dot(ab);
+				t = Math.max(0.0, Math.min(1.0, (pdotab - a.dot(ab)) / t));
+				var closest = a.clone();
+				return closest.addScaledVector(ab, t);
+			}
+
 			
 			var gThreeScene;
 			var gRenderer;
@@ -128,10 +499,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			{
 				gravity : [0.0, -10.0, 0.0],
 				dt : 1.0 / 60.0,
+				tankSize : { x: 3, y : 2, z : 3.0 },
+				tankBorder : 0.03,
+
 				numSubsteps : 15,
 				paused: true,
 				showEdges: false,
-				objects: [],				
+				objects: [],
+				colliders: [],				
 			};
 
 			// ------------------------------------------------------------------
@@ -190,30 +565,184 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				return neighbors;
 			}
 
+
+
+			// ------------------------------------------------------------------
+			class Capsule {
+				constructor(pos, vel, radius, lengthIn, density, color = 0xff0000)
+				{
+					// physics data 
+					// needs orientation as quat [0 0 0 1]
+					// straight up down Length vec[ 0 L 0]
+					// currentLine =rotLGC(quat)*[]
+					// var closest = closestPointOnSegment(ball.pos, flipper.pos, flipper.getTip());
+					this.mySystem = new THREE.Object3D();
+					// this.group = new THREE.Group();
+					// scene.add( group );
+
+					// var mesh = new THREE.Mesh( ..., ... );
+					// mesh.position.set( -2, 0, 0 );
+					// group.add( mesh )
+
+					// simulate 
+                    this.pos = pos;
+                    this.radius = radius;
+					this.length=lengthIn;
+
+					//this.mass = 4.0 * Math.PI / 3.0 * radius * radius * radius * density;
+                    this.vel =  vel;
+					this.grabbed = false;
+					this.restitution = 1;
+
+					// visual mesh
+					this.mySystem.position.copy(pos);
+
+                    let geometry = new THREE.CapsuleGeometry( radius, lengthIn, 16, 16 );
+                    let material = new THREE.MeshPhongMaterial({color: color, side: THREE.DoubleSide});
+                    this.visMesh = new THREE.Mesh( geometry, material );
+					// this.visMesh.position= this.pos.clone();
+					// this.visMesh.position.x=0;
+					// this.visMesh.position.z=0;
+
+					this.visMesh.position.y=0+this.length/2;
+					this.tip = this.pos.clone();
+					this.tip.y=(this.tip.y+this.length)
+					this.visMesh.userData = this;		// for raycasting
+					this.visMesh.layers.enable(1);
+					this.mySystem.add(this.visMesh)
+					// gThreeScene.add(this.visMesh);
+					gThreeScene.add(this.mySystem);
+
+				}
+			
+				simulate()
+				{
+					if (this.grabbed)
+						return;
+
+					// this.vel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.pos.addScaledVector(this.vel, gPhysicsScene.dt);
+
+					let wx = 0.5 * gPhysicsScene.tankSize.x - this.radius - 0.5 * gPhysicsScene.tankBorder;
+					let wz = 0.5 * gPhysicsScene.tankSize.z - this.radius - 0.5 * gPhysicsScene.tankBorder;
+
+					// if (this.pos.x < -wx) {
+						// this.pos.x = -wx; this.vel.x = -this.restitution * this.vel.x;
+					// }
+					// if (this.pos.x >  wx) {
+						// this.pos.x =  wx; this.vel.x = -this.restitution * this.vel.x;
+					// }
+					if (this.pos.z < -wz) {
+						this.pos.z = -wz; this.vel.z = -this.restitution * this.vel.z;
+					}
+					if (this.pos.z >  wz) {
+						this.pos.z =  wz; this.vel.z = -this.restitution * this.vel.z;
+					}
+					// if (this.pos.y < this.radius) {
+						// this.pos.y = this.radius; this.vel.y = -this.restitution * this.vel.y;
+					// }
+
+					 this.mySystem.position.copy(this.pos);
+					 this.tip = this.pos.clone();
+					 this.tip.y=(this.tip.y+this.length)
+					this.visMesh.geometry.computeBoundingSphere();
+				}
+
+				applyForce(force)
+				{
+					this.vel.y += gPhysicsScene.dt * force / this.mass;
+					this.vel.multiplyScalar(0.999);
+				}
+
+				startGrab(pos) 
+				{
+					this.grabbed = true;
+					this.pos.copy(pos);
+					this.visMesh.position.copy(pos);
+				}
+
+				moveGrabbed(pos, vel) 
+				{
+					this.pos.copy(pos);
+					this.visMesh.position.copy(pos);
+				}
+
+				endGrab(pos, vel) 
+				{
+					this.grabbed = false;
+					this.vel.copy(vel);
+				}		
+			}	
+
+
 			// ------------------------------------------------------------------
 			class Cloth {
 				constructor(mesh, scene, bendingCompliance = 1.0)
 				{
 					// particles
+					this.raycaster = new THREE.Raycaster();
+					const ballSpaceX = 11; // resolution
+    				const ballSpaceY = 11;
+					let maxTriangleSize = 10; // allows larger triangle webbing in cloth --minimize
+					// 0.345859. 1.145859
+					const ppDz = 0;
+    				const ppDx = 0;
+    				const ppDy = 0;
+    				const xClothOffset = -0.5;
+    				const yClothOffset = 0.1;
+    				const zClothOffset = -1;
+					let ppDxC = ppDx + xClothOffset;
+    				let ppDyC = ppDy+ yClothOffset;
+    				let ppDzC1 = ppDz+ zClothOffset;
+    				let ppDzC = ppDz- zClothOffset;
+					const clothScale = 1;
+    let TWaspect = 0.4; // TorsoWidth to L, everthing to L which is 1.0m
+    let sleeve1Aspect = 0.8; //height of sleeve bottom
+    let sleeve2Aspect = 0.3; // length of sleeve
+    let sleeve3Aspect = 1 - sleeve1Aspect;
+    let collar1Aspect = 0.2; // width collar
+    let collar2Aspect = 0.2;
+    let TH = clothScale * 0.4; // 1 meter height
+    let TW = clothScale * TWaspect;
+    let sleeve1 = clothScale * sleeve1Aspect;
+    let sleeve2 = clothScale * sleeve2Aspect;
+    let sleeve3 = clothScale * sleeve3Aspect;
+    let collar1 = clothScale * collar1Aspect;
+    let collar2 = clothScale * collar2Aspect;
+	// let ringo = LCGD(ballSpaceX, ballSpaceY, ppDxC, ppDyC);
 
-					this.numParticles = mesh.vertices.length / 3;
-					this.pos = new Float32Array(mesh.vertices);
-					this.prevPos = new Float32Array(mesh.vertices);
-					this.restPos = new Float32Array(mesh.vertices);
+	let clothOutput1 = createCloth(ballSpaceX, ballSpaceY, ppDxC, ppDyC, ppDzC, clothScale, TW, TH, sleeve1, sleeve2, collar1, collar2, maxTriangleSize);
+//  now mesh.vertices and triIds
+// become clothOutput
+					// mesh.vertices=clothOutput1.pointsPosOut
+					// this.numParticles=clothOutput1.nUniqueBallLinksOut
+					// mesh.faceTriIds=clothOutput1.indicesOut
+
+					  let meshVerticesOrig=mesh.vertices;
+					  let meshFaceTriIdsOrig=mesh.faceTriIds;
+
+					let meshVertices=clothOutput1.pointsPosOut;
+					let meshFaceTriIds=clothOutput1.indicesOut;
+
+					
+					this.numParticles = meshVertices.length / 3;
+					this.pos = new Float32Array(meshVertices);
+					this.prevPos = new Float32Array(meshVertices);
+					this.restPos = new Float32Array(meshVertices);
 					this.vel = new Float32Array(3 * this.numParticles);
 					this.invMass = new Float32Array(this.numParticles);
-
+					this.clothRadius=0.001;
 					// stretching and bending constraints
 
-					neighbors = findTriNeighbors(mesh.faceTriIds);
-					var numTris = mesh.faceTriIds.length / 3;
+					neighbors = findTriNeighbors(meshFaceTriIds);
+					var numTris = meshFaceTriIds.length / 3;
 					var edgeIds = [];
 					var triPairIds = [];
 
 					for (var i = 0; i < numTris; i++) {
 						for (var j = 0; j < 3; j++) {
-							var id0 = mesh.faceTriIds[3 * i + j];
-							var id1 = mesh.faceTriIds[3 * i + (j + 1) % 3];
+							var id0 = meshFaceTriIds[3 * i + j];
+							var id1 = meshFaceTriIds[3 * i + (j + 1) % 3];
 
 							// each edge only once
 							var n = neighbors[3 * i + j];
@@ -226,8 +755,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 								// opposite ids
 								var ni = Math.floor(n / 3);
 								var nj = n % 3;
-								var id2 = mesh.faceTriIds[3 * i + (j + 2) % 3];
-								var id3 = mesh.faceTriIds[3 * ni + (nj + 2) % 3];
+								var id2 = meshFaceTriIds[3 * i + (j + 2) % 3];
+								var id3 = meshFaceTriIds[3 * ni + (nj + 2) % 3];
 								triPairIds.push(id0);
 								triPairIds.push(id1);
 								triPairIds.push(id2);
@@ -250,7 +779,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 					this.grabId = -1;
 					this.grabInvMass = 0.0;
 
-					this.initPhysics(mesh.faceTriIds);
+					this.initPhysics(meshFaceTriIds);
 
 					// visual edge mesh
 
@@ -266,7 +795,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 					geometry = new THREE.BufferGeometry();
 					geometry.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
-					geometry.setIndex(mesh.faceTriIds);
+					geometry.setIndex(meshFaceTriIds);
 					var visMaterial = new THREE.MeshPhongMaterial({color: 0xff0000, side: THREE.DoubleSide});
 					this.triMesh = new THREE.Mesh(geometry, visMaterial);
 					this.triMesh.castShadow = true;
@@ -329,13 +858,54 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 					}
 					var eps = 0.0001;
 
-					for (var i = 0; i < this.numParticles; i++) {
-						var x = this.pos[3 * i];
-						var y = this.pos[3 * i + 1];
-						if ((y > maxY - eps) && (x < minX + eps || x > maxX - eps))
-							this.invMass[i] = 0.0;
-					}
+					// for (var i = 0; i < this.numParticles; i++) {
+					// 	var x = this.pos[3 * i];
+					// 	var y = this.pos[3 * i + 1];
+					// 	if ((y > maxY - eps) && (x < minX + eps || x > maxX - eps))
+					// 		this.invMass[i] = 0.0;
+					// }
 				}
+
+	 handleCollision(flipper) 
+	{
+		for (var i = 0; i < this.numParticles; i++) {
+
+		var closest = closestPointOnSegment(this.pos[3 * i], this.pos[3 * i + 1],this.pos[3 * i +2], flipper.pos, flipper.tip);
+		//var dir = new Vector2();
+		//dir.subtractVectors(ball.pos, closest);
+		var dx=this.pos[3 * i]-closest.x;
+		var dy=this.pos[3 * i +1]-closest.y;
+		var dz=this.pos[3 * i + 2]-closest.z;
+
+		var d = Math.sqrt(dx*dx +dy*dy + dz*dz);
+		if (d < this.clothRadius + flipper.radius){
+			
+
+		//dir.scale(1.0 / d);
+
+		var corr = (this.clothRadius+ flipper.radius - d)/d;
+		//ball.pos.add(dx, corr);
+		vecAddEz(this.pos,i,dx,dy,dz,corr);
+		vecSetZero(this.vel,i);
+		}
+		}
+
+		// set velocity to zero
+
+		// update velocitiy
+			//
+		// var radius = closest.clone();
+		// radius.add(dir, flipper.radius);
+		// radius.subtract(flipper.pos);
+		// var surfaceVel = radius.perp();
+		// surfaceVel.scale(flipper.currentAngularVelocity);
+
+		// var v = ball.vel.dot(dir);
+		// var vnew = surfaceVel.dot(dir);
+
+		// ball.vel.add(dir, vnew - v);
+	}
+
 
 				preSolve(dt, gravity)
 				{
@@ -473,10 +1043,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			// ------------------------------------------------------------------
 			function initPhysics() 
 			{
+
+				var pos = new THREE.Vector3(0, 0, -0.5);
+				var vel = new THREE.Vector3(0, 0, 0.05);
 				var mesh = meshes[0];
 
 				var body = new Cloth(mesh, gThreeScene);
 				gPhysicsScene.objects.push(body); 
+
+
+				gPhysicsScene.colliders.push(new Capsule(pos, vel, 0.1, 0.7, 0xffff00));
 				document.getElementById("numTris").innerHTML = mesh.faceTriIds.length / 3;
 				document.getElementById("numVerts").innerHTML = mesh.vertices.length / 3;
 			}
@@ -494,7 +1070,19 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 				var sdt = gPhysicsScene.dt / gPhysicsScene.numSubsteps;
 
+
+					
+
 				for (var step = 0; step < gPhysicsScene.numSubsteps; step++) {
+	
+					for (var i = 0; i < gPhysicsScene.colliders.length; i++) 
+                        gPhysicsScene.colliders[i].simulate(sdt);
+
+						for (var i = 0; i < gPhysicsScene.objects.length; i++) {
+					for (var j = 0; j < gPhysicsScene.colliders.length; j++) {
+						gPhysicsScene.objects[i].handleCollision(gPhysicsScene.colliders[j]);
+					}
+				}
 
 					for (var i = 0; i < gPhysicsScene.objects.length; i++) 
 						gPhysicsScene.objects[i].preSolve(sdt, gPhysicsScene.gravity);
@@ -504,6 +1092,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 					for (var i = 0; i < gPhysicsScene.objects.length; i++) 
 						gPhysicsScene.objects[i].postSolve(sdt);
+
 
 				}
 				for (var i = 0; i < gPhysicsScene.objects.length; i++) 
@@ -532,10 +1121,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 				// Lights
 				
 				gThreeScene.add( new THREE.AmbientLight( 0x505050 ) );	
-				gThreeScene.fog = new THREE.Fog( 0x000000, 0, 15 );				
+				// gThreeScene.fog = new THREE.Fog( 0x000000, 0, 15 );				
 
 				var spotLight = new THREE.SpotLight( 0xffffff );
-				spotLight.angle = Math.PI / 5;
+				spotLight.angle = Math.PI ;
 				spotLight.penumbra = 0.2;
 				spotLight.position.set( 2, 3, 3 );
 				spotLight.castShadow = true;

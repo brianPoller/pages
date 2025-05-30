@@ -1,0 +1,1143 @@
+<!--
+Copyright 2021 Matthias Müller - Ten Minute Physics, https://www.youtube.com/channel/UCTG_vrRdKYfrpqCv_WV4eyA
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="en">
+	<head>
+		<title>Interaction</title>
+		<style>
+			body {
+				font-family: verdana; 
+				font-size: 15px;
+			}			
+			.button {
+			background-color: #606060;
+			border: none;
+			color: white;
+			padding: 15px 32px;
+			font-size: 16px;
+			margin: 4px 2px;
+			cursor: pointer;
+		}
+		</style>	
+	</head>
+	
+	<body>
+
+        <h1>User Interaction Demo</h1> 
+		<button id = "buttonRun" onclick="run()" class="button">Run</button>
+		<button onclick="restart()" class="button">Restart</button>
+
+		<br><br>		
+        <div id="container"></div>
+        
+        <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
+        <script src="https://unpkg.com/three@0.139.2/examples/js/controls/OrbitControls.js"></script>
+		<script>
+			
+			var gThreeScene;
+			var gRenderer;
+			var gCamera;
+			var gCameraControl;
+			var gGrabber;
+			var gMouseDown = false;
+			var gGenerator;
+
+			var gPhysicsScene = 
+			{
+				gravity : new THREE.Vector3(0.0, -1.0, 0.0),
+				dt : 1.0 / 60.0,
+				worldSize : { x: 1.5, z : 3 },
+				paused: true,
+				shots: [],
+				objects: [],
+				// balls:[],	
+				colliders: [],	
+				shotClock:0.1,		
+				shotRadius:0.1,
+				shotMass:0.5,
+				shotPower:100,
+				shotSpeed:2.5,
+				colliderGeneratorClock:3.5,
+				colliderGeneratorRadius:0.1,
+				colliderGeneratorMass:0.1,
+				colliderGeneratorLife:200,
+				colliderSpeed:-1,
+				zPlane:2,
+
+			};
+
+//----------------------------------**
+
+function onlyUnique(value, index, array) {
+    return array.indexOf(value) === index;
+  }
+
+function diff(arr) {
+  const result = [];
+  for (let i = 1; i < arr.length; i++) {
+    result.push(arr[i] - arr[i - 1]);
+  }
+  return result;
+}
+
+class ConObject {
+	constructor( centerPos, radius, centerVel, massIn, life)
+				{
+// say 3xw
+this.posMap=[0, 1, 2, 3, 4, 5, 6, 7, 8]
+this.posMapXs=[1, 1, 1, 0, 0, 0, -1, -1, -1]
+this.posMapYs=[-1, 0, 1, -1, 0, 1, -1, 0, 1]
+this.disposalMap = new Array(this.posMap.length).fill(false);
+this.massMap = new Array(this.posMap.length).fill(massIn);
+this.lifeMap = new Array(this.posMap.length).fill(life);
+
+this.adjudicateCheck=false;
+this.totalMass=0;
+this.com=centerPos.clone();
+for (var j = 0; j < this.posMap.length; j++) {
+	this.totalMass=this.totalMass+this.massMap[j]
+}
+
+// check disposalMap change causes update to posMap, posMapXs, posMapYs, disposalMap 
+
+// calcCOM sum up positions and mass map, right now make is pos
+
+					// physics data 
+					// this.checkVector_currSet = new Array(this.currStitch.length).fill(true);
+
+					this.currPosXs=new Array(this.posMap).fill(0);
+					this.currPosYs=new Array(this.posMap).fill(0);
+					this.disposal=false;
+					this.isShot=false;
+                    // this.pos = centerPos;
+
+                    this.centerPos = centerPos;
+                    this.radius = radius;
+                    this.centerVel = centerVel;
+					this.grabbed = false;
+					this.dispose= false;
+					// this.mass=massMap;
+					this.life=life;
+					this.dFactor=0.01;
+					 this.grid = new THREE.Object3D();
+
+
+					// visual mesh
+
+					// for legth index	i
+					// let currOx=centerX+posMapXs[i]
+
+		for (var j = 0; j < this.posMap.length; j++) {
+            var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+            var material = new THREE.MeshBasicMaterial( {color: 0xff0000} );
+            var sphere = new THREE.Mesh( geometry, material );
+
+            sphere.position.set( this.posMapXs[j] * 2 * this.radius, this.posMapYs[j]  * 2 * this.radius, 0 );
+			sphere.geometry.computeBoundingSphere();
+			this.currPosXs[j]=this.posMapXs[j] * 2 * this.radius + this.centerPos.x;
+			this.currPosYs[j]=this.posMapYs[j]  * 2 * this.radius + this.centerPos.y; 
+            this.grid.add(sphere);
+        }
+		this.grid.position.set(this.centerPos)
+		gThreeScene.add(this.grid);
+
+
+					// var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+                    // var material = new THREE.MeshPhongMaterial({color: 0xff0000});
+                    // this.visMesh = new THREE.Mesh( geometry, material );
+					// this.visMesh.position.copy(pos);
+
+
+					// this.visMesh.userData = this;		// for raycasting
+					// this.visMesh.layers.enable(1);
+					// gThreeScene.add(this.visMesh);
+				}
+
+				updateMass(){
+					let totalMassCount=0;
+					for (var j = 0; j < this.posMap.length; j++) {
+						if (this.disposalMap[j]==false){
+							totalMassCount=totalMassCount+this.massMap[j]
+							}
+						}
+					this.totalMass=totalMassCount;
+					}
+				updateCOM(){
+					let totalXs=0; let totalYs=0;
+					for (var j = 0; j < this.posMap.length; j++) {
+						if (this.disposalMap[j]==false){
+						totalXs=totalXs+this.massMap[j]*this.posMapXs[j]
+						totalYs=totalYs+this.massMap[j]*this.posMapYs[j]
+						}
+						this.com.x=totalXs/this.totalMass;
+						this.com.y=totalYs/this.totalMass;
+
+				}
+			}
+
+			checkBreakages(){
+	
+				var uniqueXs = posMapXs.filter(onlyUnique);
+				var uniqueYs = posMapYs.filter(onlyUnique);
+				var dUniqueXs=diff(uniqueXs);
+				var dUniqueYs=diff(uniqueYs);
+				//  diff arr[i] - arr[i - 1]
+				// so 0 1 2 3 always 1
+				// 0 2 3 greater than 1,  [2 1] index
+				// 0 2 3 5  [2 1 2] index 0 to 2 ; 2 to 3; 3 to 5 [remaining]
+
+				// 0 3 greater, [3]
+				// get indices greater than one 
+				// what about missing 0- 1 2 3 ? 
+				let xBreakIndices=[]; numXbreaks=0;
+				for (var j = 0; j < dUniqueXs.length; j++) {
+					if (dUniqueXs[j]>1){
+						xBreakIndices.push[j]
+						numXbreaks++;
+					}
+				}
+				let yBreakIndices=[]; numYbreaks=0;
+				for (var j = 0; j < dUniqueYs.length; j++) {
+					if (dUniqueYs[j]>1){
+						yBreakIndices.push[j]
+						numYbreaks++;
+					}
+				}
+				let startX_i=[0]
+				for (var j = 0; j < numXbreaks; j++) {
+					if (dUniqueXs[j]>1){
+						xBreakIndices.push[j]
+						numXbreaks++;
+					}
+				}
+
+
+				let completeLength=this.posMap.length;
+					let count=0;
+
+	 					if (this.disposalMap[j]==true){
+							let value=j;
+							//
+							this.posMapXs.splice(j, 1)
+							this.posMapYs.splice(j, 1)
+							this.disposalMap.splice(j, 1)
+							this.massMap.splice(j, 1)
+							this.lifeMap.splice(j, 1)
+							this.posMap.splice(j, 1)
+							count++;
+							// todo, need to re-run 
+						}			
+			}
+
+			disposeElements(){
+				// a need to or everytime?
+				// check for br
+				while (completion==false){
+					let completeLength=this.posMap.length;
+					let count=0;
+				for (var j = 0; j < this.posMap.length; j++) {
+	 					if (this.disposalMap[j]==true){
+							let value=j;
+							//
+							this.posMapXs.splice(j, 1)
+							this.posMapYs.splice(j, 1)
+							this.disposalMap.splice(j, 1)
+							this.massMap.splice(j, 1)
+							this.lifeMap.splice(j, 1)
+							this.posMap.splice(j, 1)
+							break
+							count++;
+							// todo, need to re-run 
+						}
+					}
+					if (count==completeLength){
+						completion=true;
+					}
+				}
+			}
+
+				// 						if (gPhysicsScene.colliders[i].disposalMap[j]==true){
+				checkDisposall(){
+					let disposeCheck=0
+					for (var j = 0; j < this.posMap.length; j++) {
+	 					if (this.disposalMap[j]==true){
+							disposeCheck=disposeCheck+1
+						}
+					}
+					if (disposeCheck==this.posMap.length){
+						this.dispose==true;
+					}
+
+				}
+			
+				simulate()
+				{
+					if (this.grabbed)
+						return;
+
+					this.centerVel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.centerPos.addScaledVector(this.centerVel, gPhysicsScene.dt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.centerPos.x < -size.x) {
+						this.centerPos.x = -size.x; this.centerVel.x = -this.centerVel.x;
+					}
+					if (this.centerPos.x >  size.x) {
+						this.centerPos.x =  size.x; this.centerVel.x = -this.centerVel.x;
+					}
+					// if (this.centerPos.z < -size.z) {
+					// 	this.centerPos.z = -size.z; this.vel.z = -this.vel.z;
+					// }
+					// if (this.centerPos.z >  size.z) {
+					// 	this.centerPos.z =  size.z; this.vel.z = -this.vel.z;
+					// }
+					if (this.centerPos.y<0) {
+						// this.dispose=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.grid.position.copy(this.centerPos);
+					for (var j = 0; j < this.posMap.length; j++) {
+						this.currPosXs[j]=this.posMapXs[j] * 2 * this.radius + this.centerPos.x;
+						this.currPosYs[j]=this.posMapYs[j]  * 2 * this.radius + this.centerPos.y; 
+						if (this.currPosYs[j]<0) {
+						this.disposalMap[j]=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+					}
+					if (this.adjudicateCheck==true){
+					// this.disposeElements();
+					this.checkDisposall();
+
+					// now check for breakages 
+					// if true need to identify new maps,
+					// write those objects
+					// delete existing
+					// new objects update MOI and COM
+					
+					this.updateMass();
+					this.updateCOM();
+					// this.updateMOI();
+					}
+
+       		 }
+
+					// this.grid.geometry.computeBoundingSphere();
+				}
+			
+
+			//---------------------
+
+			class Macro {
+				constructor(pos, radius, vel, mass, life)
+				{
+					// physics data 
+					this.isShot=false;
+
+                    this.pos = pos;
+                    this.radius = radius;
+                    this.vel = vel;
+					this.grabbed = false;
+					this.dispose= false;
+					this.mass=mass;
+					this.life=life;
+					this.dFactor=0.01;
+
+
+					// visual mesh
+
+                    var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+                    var material = new THREE.MeshPhongMaterial({color: 0xff0000});
+                    this.visMesh = new THREE.Mesh( geometry, material );
+					this.visMesh.position.copy(pos);
+					this.visMesh.userData = this;		// for raycasting
+					this.visMesh.layers.enable(1);
+					gThreeScene.add(this.visMesh);
+				}
+			
+				simulate()
+				{
+					if (this.grabbed)
+						return;
+
+					this.vel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.pos.addScaledVector(this.vel, gPhysicsScene.dt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.pos.x < -size.x) {
+						this.pos.x = -size.x; this.vel.x = -this.vel.x;
+					}
+					if (this.pos.x >  size.x) {
+						this.pos.x =  size.x; this.vel.x = -this.vel.x;
+					}
+					if (this.pos.z < -size.z) {
+						this.pos.z = -size.z; this.vel.z = -this.vel.z;
+					}
+					if (this.pos.z >  size.z) {
+						this.pos.z =  size.z; this.vel.z = -this.vel.z;
+					}
+					if (this.pos.y<0) {
+						this.dispose=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.visMesh.position.copy(this.pos);
+					this.visMesh.geometry.computeBoundingSphere();
+				}
+			}
+
+
+
+			// ------------------------------------------------------------------
+			class Collider {
+				constructor(pos, radius, vel, mass, life)
+				{
+					// physics data 
+					this.isShot=false;
+
+                    this.pos = pos;
+                    this.radius = radius;
+                    this.vel = vel;
+					this.grabbed = false;
+					this.dispose= false;
+					this.mass=mass;
+					this.life=life;
+					this.dFactor=0.01;
+
+
+					// visual mesh
+
+                    var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+                    var material = new THREE.MeshPhongMaterial({color: 0xff0000});
+                    this.visMesh = new THREE.Mesh( geometry, material );
+					this.visMesh.position.copy(pos);
+					this.visMesh.userData = this;		// for raycasting
+					this.visMesh.layers.enable(1);
+					gThreeScene.add(this.visMesh);
+				}
+			
+				simulate()
+				{
+					if (this.grabbed)
+						return;
+
+					this.vel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.pos.addScaledVector(this.vel, gPhysicsScene.dt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.pos.x < -size.x) {
+						this.pos.x = -size.x; this.vel.x = -this.vel.x;
+					}
+					if (this.pos.x >  size.x) {
+						this.pos.x =  size.x; this.vel.x = -this.vel.x;
+					}
+					// if (this.pos.z < -size.z) {
+					// 	this.pos.z = -size.z; this.vel.z = -this.vel.z;
+					// }
+					// if (this.pos.z >  size.z) {
+					// 	this.pos.z =  size.z; this.vel.z = -this.vel.z;
+					// }
+					if (this.pos.y<0) {
+						this.dispose=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.visMesh.position.copy(this.pos);
+					this.visMesh.geometry.computeBoundingSphere();
+				}
+			}
+
+			// ------------------------------------------------------------------
+			class Shot {
+				constructor(pos, radius, vel, mass, power)
+				{
+					// physics data 
+					this.isShot=true;
+                    this.pos = pos;
+                    this.radius = radius;
+                    this.vel = vel;
+					this.grabbed = false;
+					this.dispose= false;
+					this.mass=mass;
+					this.power=power;
+
+					// visual mesh
+
+                    var geometry = new THREE.SphereGeometry( radius, 32, 32 );
+                    var material = new THREE.MeshPhongMaterial({color: 0xff0000});
+                    this.visMesh = new THREE.Mesh( geometry, material );
+					this.visMesh.position.copy(pos);
+					this.visMesh.userData = this;		// for raycasting
+					this.visMesh.layers.enable(1);
+					gThreeScene.add(this.visMesh);
+				}
+			
+				simulate()
+				{
+					if (this.grabbed)
+						return;
+
+					// this.vel.addScaledVector(gPhysicsScene.gravity, gPhysicsScene.dt);
+					this.pos.addScaledVector(this.vel, gPhysicsScene.dt);
+
+					var size = gPhysicsScene.worldSize;
+
+					if (this.pos.x < -size.x) {
+						this.pos.x = -size.x; this.vel.x = -this.vel.x;
+					}
+					if (this.pos.x >  size.x) {
+						this.pos.x =  size.x; this.vel.x = -this.vel.x;
+					}
+					// if (this.pos.z < -size.z) {
+					// 	this.pos.z = -size.z; this.vel.z = -this.vel.z;
+					// }
+					// if (this.pos.z >  size.z) {
+					// 	this.pos.z =  size.z; this.vel.z = -this.vel.z;
+					// }
+					if (this.pos.y>6) {
+						this.dispose=true;
+						// this.pos.y = this.radius; this.vel.y = -this.vel.y;
+					}
+
+					this.visMesh.position.copy(this.pos);
+					this.visMesh.geometry.computeBoundingSphere();
+				}
+
+				// startGrab(pos) 
+				// {
+				// 	this.grabbed = true;
+				// 	this.pos.copy(pos);
+				// 	this.visMesh.position.copy(pos);
+				// }
+
+				// moveGrabbed(pos, vel) 
+				// {
+				// 	this.pos.copy(pos);
+				// 	this.visMesh.position.copy(pos);
+				// }
+
+				// endGrab(pos, vel) 
+				// {
+				// 	this.grabbed = false;
+				// 	this.vel.copy(vel);
+				// }				
+			}
+			
+
+			// ------------------------------------------------------------------
+			// function initPhysics() 
+			// {
+				// var radius = 0.2;
+				// var pos = new THREE.Vector3(0.0, 1.0, 1,0);
+//				var vel = new THREE.Vector3(2.0, 5.0, 3.0);
+				// var vel = new THREE.Vector3();
+				
+				// gPhysicsScene.objects.push(new Ball(pos, radius, vel)); 
+			// }
+
+
+			function removeShots(){
+				for (var i = 0; i < gPhysicsScene.shots.length; i++){
+					if (gPhysicsScene.shots[i].dispose==true){
+						let value=gPhysicsScene.shots[i];
+						gPhysicsScene.shots[i].visMesh.visible = false;
+						gPhysicsScene.shots = gPhysicsScene.shots.filter(item => item !== value);
+					}
+				}
+			}
+			
+
+			function removeColliders(){
+				// if length of conObj disposalMap is zero remove it, otherwise
+				for (var i = 0; i < gPhysicsScene.colliders.length; i++){
+					for (var j = 0; j < gPhysicsScene.colliders[i].posMap.length; j++){
+
+						if (gPhysicsScene.colliders[i].disposalMap[j]==true){
+							let value=gPhysicsScene.colliders[i].grid[j];
+							gPhysicsScene.colliders[i].grid.children[j].visible = false;
+							// gPhysicsScene.colliders = gPhysicsScene.colliders.filter(item => item !== value);
+						}
+					}
+					// this removres conObj
+					if (gPhysicsScene.colliders[i].dispose==true){
+						let value=gPhysicsScene.colliders[i];
+					gPhysicsScene.colliders = gPhysicsScene.colliders.filter(item => item !== value);
+					}
+				}
+			}
+
+			// ------------------------------------------------------------------
+			
+			function simulate() 
+			{
+				if (gPhysicsScene.paused)
+					return;
+				for (var i = 0; i < gPhysicsScene.shots.length; i++)
+					gPhysicsScene.shots[i].simulate();
+
+				for (var i = 0; i < gPhysicsScene.colliders.length; i++)
+					gPhysicsScene.colliders[i].simulate();
+
+					gGrabber.increaseTime(gPhysicsScene.dt);
+					gGenerator.increaseTime(gPhysicsScene.dt);
+			}
+
+			// ------------------------------------------
+					
+			function initThreeScene() 
+			{
+				gThreeScene = new THREE.Scene();
+				
+				// Lights
+				
+				gThreeScene.add( new THREE.AmbientLight( 0x505050 ) );	
+				gThreeScene.fog = new THREE.Fog( 0x000000, 0, 15 );				
+
+				var spotLight = new THREE.SpotLight( 0xffffff );
+				spotLight.angle = Math.PI / 5;
+				spotLight.penumbra = 0.2;
+				spotLight.position.set( 2, 3, 3 );
+				spotLight.castShadow = true;
+				spotLight.shadow.camera.near = 3;
+				spotLight.shadow.camera.far = 10;
+				spotLight.shadow.mapSize.width = 1024;
+				spotLight.shadow.mapSize.height = 1024;
+				gThreeScene.add( spotLight );
+
+				var dirLight = new THREE.DirectionalLight( 0x55505a, 1 );
+				dirLight.position.set( 0, 3, 0 );
+				dirLight.castShadow = true;
+				dirLight.shadow.camera.near = 1;
+				dirLight.shadow.camera.far = 10;
+
+				dirLight.shadow.camera.right = 1;
+				dirLight.shadow.camera.left = - 1;
+				dirLight.shadow.camera.top	= 1;
+				dirLight.shadow.camera.bottom = - 1;
+
+				dirLight.shadow.mapSize.width = 1024;
+				dirLight.shadow.mapSize.height = 1024;
+				gThreeScene.add( dirLight );
+				
+				// Geometry
+
+				var ground = new THREE.Mesh(
+					new THREE.PlaneBufferGeometry( 20, 20, 1, 1 ),
+					new THREE.MeshPhongMaterial( { color: 0xa0adaf, shininess: 150 } )
+				);				
+
+				ground.rotation.x = - Math.PI / 2; // rotates X/Y to X/Z
+				ground.receiveShadow = true;
+				gThreeScene.add( ground );
+				
+				var helper = new THREE.GridHelper( 20, 20 );
+				helper.material.opacity = 1.0;
+				helper.material.transparent = true;
+				helper.position.set(0, 0.002, 0);
+				gThreeScene.add( helper );				
+				
+				// Renderer
+
+				gRenderer = new THREE.WebGLRenderer();
+				gRenderer.shadowMap.enabled = true;
+				gRenderer.setPixelRatio( window.devicePixelRatio );
+				gRenderer.setSize( 0.8 * window.innerWidth, 0.8 * window.innerHeight );
+				window.addEventListener( 'resize', onWindowResize, false );
+				container.appendChild( gRenderer.domElement );
+				
+				// Camera
+						
+				gCamera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 100);
+			    gCamera.position.set(0, 1, 4);
+				gCamera.updateMatrixWorld();	
+
+				gThreeScene.add(gCamera);
+
+				// gCameraControl = new THREE.OrbitControls(gCamera, gRenderer.domElement);
+				// gCameraControl.zoomSpeed = 2.0;
+    			// gCameraControl.panSpeed = 0.4;
+
+				// grabber
+				gGenerator= new ColliderGenerator(gPhysicsScene);
+				gGrabber = new Grabber(gPhysicsScene);
+				container.addEventListener( 'pointerdown', onPointer, false );
+				container.addEventListener( 'pointermove', onPointer, false );
+				container.addEventListener( 'pointerup', onPointer, false );
+			}
+
+			// collider generator
+			class ColliderGenerator {
+				constructor(physicsScene) {
+					this.time = 0.0;
+					this.generatorClock=physicsScene.colliderGeneratorClock;
+					this.radius=physicsScene.colliderGeneratorRadius;
+					this.mass=physicsScene.colliderGeneratorMass;
+					this.life=physicsScene.colliderGeneratorLife;
+					this.speed=physicsScene.colliderSpeed;
+				}
+
+				increaseTime(dt) {
+					this.time += dt;
+					if (this.time>this.generatorClock){
+						this.generateCollider();
+						this.time=0;
+					}
+					
+				}
+				generateCollider(){
+					gPhysicsScene.colliders.push(new ConObject(new THREE.Vector3(0,2.5,gPhysicsScene.zPlane), this.radius, new THREE.Vector3(0,this.speed,0), this.mass, this.life)); 
+					// constructor( centerPos, radius, centerVel, massMap, life)
+				}
+			}
+
+			// ------- grabber -----------------------------------------------------------
+
+			class Grabber {
+				constructor(physicsScene) {
+					this.raycaster = new THREE.Raycaster();
+					this.raycaster.layers.set(1);
+					this.raycaster.params.Line.threshold = 0.1;
+					this.physicsObject = null;
+					this.planeDistance = -2;
+					this.prevPos = new THREE.Vector3();
+					// this.vel = new THREE.Vector3();
+					this.time = 0.0;
+					this.shotClock=physicsScene.shotClock;
+					this.fireOn=false;
+					this.radius=physicsScene.shotRadius;
+					this.vel = new THREE.Vector3(0,physicsScene.shotSpeed,0);
+					this.mass=physicsScene.shotMass;
+					this.power=physicsScene.shotPower;
+				}
+				// method change weapon
+				// udate shotClock, radius, vel, mass, power
+
+				increaseTime(dt) {
+					if (this.fireOn==true){
+					this.time += dt;
+					if (this.time>this.shotClock){
+						this.fire();
+						this.time=0;
+					}
+					}
+				}
+				updateRaycaster(x, y) {
+					var rect = gRenderer.domElement.getBoundingClientRect();
+					this.mousePos = new THREE.Vector2();
+					this.mousePos.x = ((x - rect.left) / rect.width ) * 2 - 1;
+					this.mousePos.y = -((y - rect.top) / rect.height ) * 2 + 1;
+					this.raycaster.setFromCamera( this.mousePos, gCamera );
+				}
+				start(x, y) {
+					this.physicsObject = null;
+					this.updateRaycaster(x, y);
+					var intersects = this.raycaster.intersectObjects( gThreeScene.children );
+					this.fireOn=true;
+					this.time=0;
+					this.fire();
+
+					// if (intersects.length > 0) {
+					// 	var obj = intersects[0].object.userData;
+					// 	if (obj) {
+					// 		this.physicsObject = obj;
+					// 		this.distance = intersects[0].distance;
+					// 		var pos = this.raycaster.ray.origin.clone();
+					// 		pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+					// 		this.physicsObject.startGrab(pos);
+					// 		this.prevPos.copy(pos);
+					// 		this.vel.set(0.0, 0.0, 0.0);
+					// 		this.time = 0.0;
+					// 		if (gPhysicsScene.paused)
+					// 			run();
+					// 	}
+					// }
+				}
+				move(x, y) {
+					// if (this.physicsObject) {
+						this.updateRaycaster(x, y);
+						// var pos = this.raycaster.ray.origin.clone();
+						// pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+
+						// this.vel.copy(pos);
+						// this.vel.sub(this.prevPos);
+						// if (this.time > 0.0)
+						// 	this.vel.divideScalar(this.time);
+						// else
+						// 	vel.set(0.0, 0.0, 0.0);
+						// this.prevPos.copy(pos);
+						// this.time = 0.0;
+
+						// this.physicsObject.moveGrabbed(pos, this.vel);
+					// }
+				}
+				end(x, y) {
+					this.fireOn=false;
+					// if (this.physicsObject) { 
+					// 	this.physicsObject.endGrab(this.prevPos, this.vel);
+					// 	this.physicsObject = null;
+					// }
+				}
+				fire(){
+					var pos = this.raycaster.ray.origin.clone();
+					var plane= new THREE.Plane(new THREE.Vector3( 0, 0, 1 ),this.planeDistance)
+					var pointVec=new THREE.Vector3()
+					this.raycaster.ray.intersectPlane(plane,pointVec)
+					pos.addScaledVector(pointVec,1);
+
+						// pos.addScaledVector(this.raycaster.ray.direction, this.distance);
+						// var vel = new THREE.Vector3(0,3,0);
+						// var radius = 0.2;
+
+					gPhysicsScene.shots.push(new Shot(pointVec, this.radius, this.vel, this.mass, this.power)); 
+				}
+			}			
+
+			function onPointer( evt ) 
+			{
+				event.preventDefault();
+				if (evt.type == "pointerdown") {
+					gGrabber.start(evt.clientX, evt.clientY);
+					gMouseDown = true;
+					// if (gGrabber.physicsObject) {
+						// gCameraControl.saveState();
+						// gCameraControl.enabled = false;
+					// }
+					var radius = 0.2;
+				// var pos = new THREE.Vector3(evt.clientX, evt.clientY, 1,0);
+//				var vel = new THREE.Vector3(2.0, 5.0, 3.0);
+				// var vel = new THREE.Vector3();
+				// 	gPhysicsScene.objects.push(new Ball(pos, radius, vel)); 
+
+				}
+				else if (evt.type == "pointermove" && gMouseDown) {
+					gGrabber.move(evt.clientX, evt.clientY);
+				}
+				else if (evt.type == "pointerup") {
+					// if (gGrabber.physicsObject) {
+						gGrabber.end();
+						// gCameraControl.reset();
+					// }
+					gMouseDown = false;
+					// gCameraControl.enabled = true;
+				}
+			}	
+			
+			// ------------------------------------------------------
+
+			function onWindowResize() {
+
+				gCamera.aspect = window.innerWidth / window.innerHeight;
+				gCamera.updateProjectionMatrix();
+				gRenderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			function run() {
+				var button = document.getElementById('buttonRun');
+				if (gPhysicsScene.paused)
+					button.innerHTML = "Stop";
+				else
+					button.innerHTML = "Run";
+				gPhysicsScene.paused = !gPhysicsScene.paused;
+			}
+
+			function restart() {
+				location.reload();
+			}
+
+
+			function handle2ConObjCollision(conObj, conObj2, restitution) 
+			{
+
+				if (conObj.dispose==true){
+						return;
+						// check
+				}
+				if (conObj2.dispose==true){
+						return;
+						// check
+				}
+			
+
+
+				// for loop here
+				for (var j = 0; j < conObj2.posMap.length; j++) {
+					if (conObj2.disposalMap[j]==true)
+						continue;
+						for (var k = 0; k < conObj.posMap.length; k++) {
+							if (conObj.disposalMap[k]==true)
+							continue;
+
+				var dir1 = new THREE.Vector3();
+				dir1.subVectors(new THREE.Vector3(conObj2.currPosXs[j],conObj2.currPosYs[j], 2), new THREE.Vector3(conObj.currPosXs[k],conObj.currPosYs[k], 2));
+				var d = dir1.length();
+				if (d == 0.0 || d > conObj2.radius + conObj.radius)
+					continue;
+				
+				// dir.multiplyScalar(1.0 / d);
+
+				var corr = (conObj2.radius + conObj.radius - d) / 2.0;
+				dir1.multiplyScalar(corr / d);
+
+				conObj.pos.sub(dir1);
+				conObj2.pos.add(dir1);
+
+				var v1 = conObj.centerVel.dot(dir1);
+				var v2 = conObj2.centerVel.dot(dir1);
+
+				var m1 = conObj.totalMass;
+				var m2 = conObj2.totalMass;
+
+				var newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
+				var newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
+				var dir2=dir1.clone();
+				var dir1damage=dir1.clone();
+				var dir2damage=dir1.clone();
+
+
+				// adding dir scaled by newV1 - v1 to ball1.vel
+				conObj.centerVel.add(dir1.multiplyScalar(newV1 - v1));
+				// adding dir scaled by newV2 - v2 to ball2.vel
+				conObj2.centerVel.add(dir2.multiplyScalar(newV2 - v2));
+				
+				
+				// this is because ball2 is collider or shot
+
+				//collider collider coll
+				let b1d=conObj.dFactor*dir1damage.multiplyScalar(newV1 - v1).length();
+				let b2d=conObj.dFactor*dir2damage.multiplyScalar(newV2 - v2).length();
+				let currLife2=conObj2.lifeMap[j]
+				let currLife=conObj.lifeMap[k]
+
+
+				conObj2.lifeMap[j]=currLife2-b1d;
+				conObj.lifeMap[k]=currLife-b1d;
+				if (conObj2.lifeMap[j]<=0){
+						conObj2.disposalMap[j]=true;
+					}
+				if (conObj.lifeMap[k]<=0){
+					conObj.disposalMap[k]=true;
+				}
+				// ball1.life=ball1.life-b1d;
+				// ball2.life=ball2.life-b2d;
+
+				// collider collider collision 
+				// means damage is factor x speed mass
+					
+
+					}
+				}
+
+			}
+
+
+			function handleBallConObjCollision(ball1, conObj, restitution) 
+			{
+
+				if (ball1.dispose==true){
+						return;
+				}
+				if (conObj.dispose==true){
+						return;
+				}
+			
+				// for loop here
+				for (var j = 0; j < conObj.posMap.length; j++) {
+					if (conObj.disposalMap[j]==true)
+						continue;
+				var dir0 = new THREE.Vector3();
+				dir0.subVectors(new THREE.Vector3(conObj.currPosXs[j],conObj.currPosYs[j], 2), ball1.pos);
+				var d = dir0.length();
+				dir0.normalize();
+				if (d == 0.0 || d > ball1.radius + conObj.radius)
+					continue;
+
+				var dir1 = new THREE.Vector3();
+				dir1.subVectors(conObj.centerPos, ball1.pos);
+				
+				var corr = (ball1.radius + conObj.radius - d) / 2.0;
+				ball1.pos.addScaledVector(dir0,-corr);
+				conObj.centerPos.addScaledVector(dir0,corr);
+
+				var v1 = ball1.vel.dot(dir1);
+				var v2 = conObj.centerVel.dot(dir1);
+
+				var m1 = ball1.mass;
+				var m2 = conObj.totalMass;
+
+				var newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
+				var newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
+				var dir2=dir1.clone();
+				// var dir1damage=dir1.clone();
+				// var dir2damage=dir1.clone();
+
+				// ball1.vel.addScaledVector(dir1,newV1 - v1);
+				conObj.centerVel.addScaledVector(dir2,newV2 - v2);
+
+				// adding dir scaled by newV1 - v1 to ball1.vel
+				// ball1.vel.add(dir1.multiplyScalar(newV1 - v1));
+				// adding dir scaled by newV2 - v2 to ball2.vel
+				// conObj.centerVel.add(dir2.multiplyScalar(newV2 - v2));
+				
+				
+				// this is because ball2 is collider or shot
+				// in this version  ball
+				if (ball1.isShot==true){
+					let currLife=conObj.lifeMap[j]
+					conObj.lifeMap[j]=currLife-ball1.power;
+					if (currLife<=0){
+						conObj.disposalMap[j]=true;
+						conObj.adjudicateCheck=true;
+					}
+				
+					if (ball1.dispose==false){
+						ball1.dispose=true;
+					}
+			}  else {
+				//collider collider coll
+				// let b1d=ball1.dFactor*dir1damage.multiplyScalar(newV1 - v1).length();
+				// let b2d=ball2.dFactor*dir2damage.multiplyScalar(newV2 - v2).length();
+
+				// ball1.life=ball1.life-b1d;
+				// ball2.life=ball2.life-b2d;
+
+				// collider collider collision 
+				// means damage is factor x speed mass
+			}
+
+        }
+
+		
+
+
+				// ball2.vel.addVectors(dir, newV2 - v2);	
+				// if ball1 is shot, dispose ?  
+
+			}
+
+
+			function handleBallCollision(ball1, ball2, restitution) 
+			{
+
+				if (ball2.dispose==true){
+						return;
+						// check
+				}
+				if (ball1.dispose==true){
+						return;
+						// check
+				}
+			
+
+				var dir1 = new THREE.Vector3();
+				dir1.subVectors(ball2.pos, ball1.pos);
+				var d = dir1.length();
+				if (d == 0.0 || d > ball1.radius + ball2.radius)
+					return;
+				
+				// dir.multiplyScalar(1.0 / d);
+
+				var corr = (ball1.radius + ball2.radius - d) / 2.0;
+				dir1.multiplyScalar(corr / d);
+
+				ball1.pos.sub(dir1);
+				ball2.pos.add(dir1);
+
+				var v1 = ball1.vel.dot(dir1);
+				var v2 = ball2.vel.dot(dir1);
+
+				var m1 = ball1.mass;
+				var m2 = ball2.mass;
+
+				var newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
+				var newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
+				var dir2=dir1.clone();
+				var dir1damage=dir1.clone();
+				var dir2damage=dir1.clone();
+
+
+				// adding dir scaled by newV1 - v1 to ball1.vel
+				ball1.vel.add(dir1.multiplyScalar(newV1 - v1));
+				// adding dir scaled by newV2 - v2 to ball2.vel
+				ball2.vel.add(dir2.multiplyScalar(newV2 - v2));
+				
+				if (ball2.isShot==true){
+					ball1.life=ball1.life-ball2.power;
+					if (ball1.life<=0){
+						ball1.dispose=true;
+					}
+				
+					if (ball2.dispose==false){
+						ball2.dispose=true;
+					}
+			}  else {
+				let b1d=ball1.dFactor*dir1damage.multiplyScalar(newV1 - v1).length();
+				let b2d=ball2.dFactor*dir2damage.multiplyScalar(newV2 - v2).length();
+
+				ball1.life=ball1.life-b1d;
+				ball2.life=ball2.life-b2d;
+
+				// collider collider collision 
+				// means damage is factor x speed mass
+			}
+
+
+				// ball2.vel.addVectors(dir, newV2 - v2);	
+				// if ball1 is shot, dispose ?  
+
+			}
+			
+			
+			// make browser to call us repeatedly -----------------------------------
+
+			function update() {
+				simulate();
+
+				// for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+				// 	for (j = i+1; j < gPhysicsScene.colliders.length; j++) {
+				// 	handleBallCollision(gPhysicsScene.colliders[i],gPhysicsScene.colliders[j]);
+				// 	}
+				// }
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					for (j = 0; j < gPhysicsScene.shots.length; j++) {
+						let elasticy=1;
+						handleBallConObjCollision(gPhysicsScene.shots[j],gPhysicsScene.colliders[i],elasticy);
+					}
+				}
+
+				for (i = 0; i < gPhysicsScene.colliders.length; i++) {
+					for (j = 0; j < gPhysicsScene.colliders.length; j++) {
+						let elasticy=1;
+				//  handle2ConObjCollision(gPhysicsScene.colliders[i],gPhysicsScene.colliders[j],elasticy);
+					}
+				}
+				// handle ball shot collisions
+				removeShots();
+				removeColliders();
+
+				gRenderer.render(gThreeScene, gCamera);
+				requestAnimationFrame(update);
+					
+				}
+			
+			initThreeScene();
+			onWindowResize();
+			// initPhysics();
+			update();
+			
+			
+		</script>
+	</body>
+</html>
