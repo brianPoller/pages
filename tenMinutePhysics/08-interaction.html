@@ -50,12 +50,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 			var gGrabber;
 			var gMouseDown = false;
 			var gGenerator;
+	  const originalWidth = 320; // Your game's original width
+      const originalHeight = 640; // Your game's original height
+      const originalAspectRatio = originalWidth / originalHeight;
 
 			var gPhysicsScene = 
 			{
 				gravity : new THREE.Vector3(0.0, -1.0, 0.0),
 				dt : 1.0 / 60.0,
-				worldSize : { x: 1.5, z : 3 },
+				worldSize : { x: 1, z : 7 },
 				paused: true,
 				shots: [],
 				objects: [],
@@ -959,15 +962,19 @@ class ConObject0 {
 				gRenderer = new THREE.WebGLRenderer();
 				gRenderer.shadowMap.enabled = true;
 				gRenderer.setPixelRatio( window.devicePixelRatio );
-				gRenderer.setSize( 0.8 * window.innerWidth, 0.8 * window.innerHeight );
+				gRenderer.setSize( originalWidth, originalHeight );
+				
 				window.addEventListener( 'resize', onWindowResize, false );
 				container.appendChild( gRenderer.domElement );
 				
 				// Camera
 						
-				gCamera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 100);
+				gCamera = new THREE.PerspectiveCamera( 70, originalAspectRatio, 0.01, 100);
 			    gCamera.position.set(0, 1, 4);
+			// why arbitrary?
 				gCamera.updateMatrixWorld();	
+				//gCamera.aspect = originalWidth /originalHeight;
+				gCamera.updateProjectionMatrix();
 
 				gThreeScene.add(gCamera);
 
@@ -1156,9 +1163,32 @@ class ConObject0 {
 
 			function onWindowResize() {
 
-				gCamera.aspect = window.innerWidth / window.innerHeight;
-				gCamera.updateProjectionMatrix();
-				gRenderer.setSize( window.innerWidth, window.innerHeight );
+
+
+
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const windowAspectRatio = windowWidth / windowHeight;
+      // first find new aspect,  
+	  // minwidth is minimum originalWidth, windowWidth
+
+		
+      if (windowAspectRatio > originalAspectRatio) {
+
+          //  wider than the game's original aspect ratio
+          // Scale height to screeheight and make width= screenheigh * aspect
+
+		 gRenderer.setSize(windowHeight*originalAspectRatio, windowHeight);
+
+		} else {
+          // Window is taller than the game's original aspect ratio
+          // Scale width to fit
+        //   canvas.width = windowWidth / (windowHeight / originalHeight);
+        //   canvas.height = originalHeight;
+		 gRenderer.setSize(windowWidth, windowWidth / originalAspectRatio);
+
+      }
+
 			}
 
 			function run() {
